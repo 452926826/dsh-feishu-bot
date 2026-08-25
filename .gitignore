@@ -1,0 +1,8 @@
+node_modules/
+.npm-cache/
+dist/
+.env
+.DS_Store
+credentials.json
+feishu-bind-qr.png
+state.json

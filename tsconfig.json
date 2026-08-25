@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/cordis": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-agent": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-agent/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-llm": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-session": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-session/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-session-persistence": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-session-title": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-session-title/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-workspace": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-workspace/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-host-webserver": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-host-webserver/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-user-approval": ["/usr/local/node/npm/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-user-approval/lib/types/index.d.ts"]
+    },
+    "strict": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "lib",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["src/**/*.ts"]
+}
