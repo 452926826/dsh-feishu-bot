@@ -1,99 +1,101 @@
 # dsh-feishu-bot
 
-通过飞书应用机器人 WebSocket 长连接使用 DeepSeek Harness，不需要公网回调地址。首次启动可通过二维码一键创建并绑定飞书应用，无需手工复制 App ID/Secret。
+English | [简体中文](README.zh-CN.md)
 
-## 扫码绑定
+Use DeepSeek Harness through a Feishu application bot over a WebSocket long connection, without exposing a public callback URL. On first start, the plugin can create and bind a Feishu application through a QR code, so App ID and App Secret do not need to be copied manually.
 
-插件未找到现有凭据时会自动调用飞书官方 OAuth 2.0 Device Authorization Grant 一键创建应用流程，在 DSH 终端日志直接显示二维码，并生成：
+## QR-code binding
+
+When no credentials are available, the plugin starts Feishu's OAuth 2.0 Device Authorization Grant application-creation flow, renders a QR code in the DSH terminal, and writes it to:
 
 ```text
 ~/.dsh/feishu-bot/feishu-bind-qr.png
 ```
 
-使用飞书扫描二维码，在确认页创建并授权应用。扫码用户必须有所在租户创建企业自建应用的权限。二维码通常在约 10 分钟后过期；过期后重启 DSH 会生成新的二维码。
+Scan the code in Feishu and create and authorize the application on the confirmation page. The scanning user must have permission to create a custom application in the tenant. The QR code normally expires after about ten minutes; restart DSH to generate another one.
 
-扫码确认后，插件会：
+After confirmation, the plugin:
 
-1. 申请机器人发送消息权限 `im:message:send_as_bot`。
-2. 订阅接收消息事件 `im.message.receive_v1`。
-3. 立即将飞书返回的凭据和扫码者 `open_id` 以 `0600` 权限保存到 `~/.dsh/feishu-bot/credentials.json`，再调用 tenant token API验证；后置验证失败会记录警告，但不会丢弃已创建应用的凭据或重复创建机器人。
-4. 默认只允许扫码者向机器人发指令；可通过 `FEISHU_ALLOWED_CHATS` 额外开放指定群聊。
-5. 删除已使用的二维码并立即连接飞书 WebSocket。
+1. Requests the `im:message:send_as_bot` permission.
+2. Subscribes to `im.message.receive_v1` events.
+3. Saves the returned credentials and the scanner's `open_id` to `~/.dsh/feishu-bot/credentials.json` with mode `0600`, then validates them with the tenant token API. A post-creation validation failure is logged but does not discard the credentials or create another bot.
+4. Allows only the scanning user by default. Additional group chats can be allowed through `FEISHU_ALLOWED_CHATS`.
+5. Deletes the consumed QR code and connects to Feishu WebSocket immediately.
 
-创建完成后，按飞书确认页指引发布应用，将机器人加入群聊或与机器人单聊。无需公网回调地址。
+Publish the application as instructed by Feishu, then add the bot to a group or start a direct conversation. No public callback URL is required.
 
-## 指令
+## Commands
 
-- `/lp`：列出所有项目
-- `/up + 项目名`：进入已有项目
-- `/np + 项目名`：在项目根目录创建并进入新项目
-- `/lc`：按从 1 开始的索引列出当前项目全部对话
-- `/uc + 索引`：进入对话，并返回最近 2 条用户/助手消息
-- `/nc`：在当前项目创建并进入新对话
-- `/approve`：批准当前待审批操作一次
-- `/reject`：拒绝当前待审批操作
-- `/批准`、`/拒绝`：上述命令的中文别名
-- `/help`：显示帮助
-- 其他文本：发送到当前 Harness 对话，并把最终回答发回飞书
+- `/lp`: list projects
+- `/up + project name`: select an existing project
+- `/np + project name`: create and select a project under the projects root
+- `/lc`: list conversations in the current project with one-based indexes
+- `/uc + index`: select a conversation and return its two latest user/assistant messages
+- `/nc`: create and select a conversation in the current project
+- `/approve`: approve the current pending operation once
+- `/reject`: reject the current pending operation
+- `/批准` and `/拒绝`: Chinese aliases for approval and rejection
+- `/help`: show help
+- Any other text: send it to the active Harness conversation and return the final answer to Feishu
 
-收到指令后，机器人会立即发送“思考中…”占位消息；Harness 完成后会把该消息更新为回答。回答超过 3500 个 Unicode 字符时自动拆分为多条消息，优先在换行处切分，不会切断 emoji 等 Unicode 字符。
+The bot first sends a thinking placeholder and updates it with the final answer. Replies longer than 3,500 Unicode characters are split into multiple messages at newline boundaries when possible, without splitting Unicode code points.
 
-当当前对话中的工具需要审批时，机器人会主动发送工具名、原因和参数摘要。仅发起该Harness对话的飞书会话可以回复 `/approve`（只批准本次）或 `/reject`；发送失败、超时和没有对应飞书会话时均拒绝或交给其他已配置的审批渠道处理。
+When a tool requests approval, the bot sends the tool name, reason, and an argument summary. Only the Feishu chat that initiated the Harness conversation can answer with `/approve` or `/reject`. Failed delivery, timeouts, and conversations without a Feishu route are rejected or passed to another configured approval channel.
 
-项目和对话选择按飞书 `chat_id` 隔离，并持久化到 `$DSH_HOME/feishu-bot/state.json`。
+Project and conversation selections are isolated by Feishu `chat_id` and persisted in `$DSH_HOME/feishu-bot/state.json`.
 
-## 环境变量
+## Environment variables
 
-二维码绑定不需要配置 App ID/Secret。可选配置：
+QR binding does not require App ID or App Secret. Optional settings:
 
 ```bash
 export FEISHU_PROJECTS_ROOT='/absolute/path/to/projects'
-# 推荐：只允许这些飞书 chat_id 操作 Harness，逗号分隔。
+# Recommended: comma-separated Feishu chat IDs allowed to operate Harness.
 export FEISHU_ALLOWED_CHATS='oc_xxx,oc_yyy'
 ```
 
-仍支持手工凭据，环境变量的优先级高于扫码保存的凭据：
+Manual credentials are still supported and take precedence over saved QR-binding credentials:
 
 ```bash
 export FEISHU_APP_ID='cli_xxx'
 export FEISHU_APP_SECRET='xxx'
 ```
 
-其他可选变量：
+Other optional variables:
 
-- `FEISHU_CREDENTIALS_PATH`：扫码凭据文件路径
-- `FEISHU_QR_PATH`：二维码 PNG 输出路径
-- `FEISHU_QR_TERMINAL=false`：不在终端日志显示二维码（默认显示）
-- `FEISHU_REBIND=true`：下次启动时删除已保存的本地凭据并重新扫码绑定；成功后应移除该变量
-- `FEISHU_STATE_PATH`：项目和对话选择状态文件路径
-- `DSH_HOME`：Harness 数据目录，默认 `~/.dsh`
+- `FEISHU_CREDENTIALS_PATH`: saved credential file path
+- `FEISHU_QR_PATH`: QR-code PNG output path
+- `FEISHU_QR_TERMINAL=false`: disable terminal QR rendering
+- `FEISHU_REBIND=true`: delete saved credentials and bind again on the next start; remove it after successful binding
+- `FEISHU_STATE_PATH`: project and conversation selection state path
+- `DSH_HOME`: Harness data directory, defaulting to `~/.dsh`
 
-## 安装
+## Installation
 
-将发布归档复制到目标机器后安装：
+Install a release archive copied to the target machine:
 
 ```bash
 dsh plugin --profile web add /absolute/path/to/dsh-feishu-bot-0.1.4.tgz
 ```
 
-如果安装提示 `Ignored build scripts: protobufjs`，编辑目标 profile 的 `pnpm-workspace.yaml`，将自动生成的提示改为：
+If installation reports `Ignored build scripts: protobufjs`, edit the target profile's `pnpm-workspace.yaml` and add:
 
 ```yaml
 allowBuilds:
   protobufjs: true
 ```
 
-然后重新运行安装命令。默认 profile 文件位于 `~/.dsh/profiles/web/pnpm-workspace.yaml`。
+Then repeat the installation. The default profile file is `~/.dsh/profiles/web/pnpm-workspace.yaml`.
 
-安装完成后重启 Harness：
+Restart Harness after installation:
 
 ```bash
 dsh web
 ```
 
-插件包含 Host 和 Web 客户端两侧。安装并启用插件后，Harness 的“设置 → 插件”中会出现“飞书配置”；卸载或禁用插件后该入口消失。未绑定时页面显示二维码，已绑定时只显示脱敏绑定信息。每台机器默认使用自己的 `~/.dsh/feishu-bot/credentials.json`，目标机器应重新扫码绑定，不要将源机器的 App Secret 或凭据文件放进插件归档。
+The package contains both Host and Web client plugins. When enabled, a Feishu configuration entry appears under Harness Settings > Plugins. An unbound installation displays the QR code; a bound installation only displays masked binding information. Each machine uses its own `~/.dsh/feishu-bot/credentials.json` by default. Bind again on the target machine and never include App Secret or credential files in the plugin archive.
 
-从源码开发安装：
+Install from source for development:
 
 ```bash
 npm install
@@ -101,16 +103,16 @@ npm run check
 dsh plugin --profile web add .
 ```
 
-查看当前绑定状态（不会读取或输出 App Secret）：
+Inspect the current binding state without reading or printing App Secret:
 
 ```bash
 npm run binding:status
 ```
 
-状态为 `waiting-for-scan-confirmation` 表示二维码已经生成，但飞书页面还没有完成最终确认；`bound` 表示凭据已经落盘。
+`waiting-for-scan-confirmation` means a QR code exists but the Feishu confirmation flow is incomplete. `bound` means credentials have been saved.
 
-## 安全
+## Security
 
-二维码包含短时设备授权凭据，在完成绑定前不要发给无权创建应用的人。长期 App Secret 只存于本机凭据文件，不写入二维码、仓库或 `cordis.patch.yml`。
+The QR code contains short-lived device authorization credentials. Do not share it with anyone who should not be able to create an application. The long-lived App Secret remains in the local credential file and is never written to the QR code, repository, or `cordis.patch.yml`.
 
-机器人收到的普通文本会作为用户指令提交给 Harness，权限等同于当前 DSH profile。生产使用应配置 `FEISHU_ALLOWED_CHATS`；否则任何能联系机器人的飞书 chat 都可操作 Harness。
+Ordinary bot messages are submitted to Harness as user instructions and have the same effective permissions as the active DSH profile. Configure `FEISHU_ALLOWED_CHATS` in production; otherwise, any Feishu chat that can contact the bot may operate Harness.
