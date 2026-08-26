@@ -103,6 +103,12 @@ npm run check
 dsh plugin --profile web add .
 ```
 
+It can also be installed directly from GitHub:
+
+```bash
+dsh plugin --profile web add github:452926826/dsh-feishu-bot
+```
+
 Inspect the current binding state without reading or printing App Secret:
 
 ```bash

@@ -103,6 +103,12 @@ npm run check
 dsh plugin --profile web add .
 ```
 
+也可以直接从 GitHub 安装：
+
+```bash
+dsh plugin --profile web add github:452926826/dsh-feishu-bot
+```
+
 查看当前绑定状态（不会读取或输出 App Secret）：
 
 ```bash
