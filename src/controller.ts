@@ -37,7 +37,7 @@ export type ControllerResult = {
 const HELP = [
   '可用指令：',
   '/lp - 列出所有项目',
-  '/up + 项目名 - 进入项目',
+  '/up + 项目名或索引 - 进入项目',
   '/np + 项目名 - 创建项目',
   '/lc - 列出当前项目的对话',
   '/uc + 索引 - 进入对话并显示最近 2 条记录',
@@ -73,6 +73,13 @@ function exactProject(projects: ProjectInfo[], name: string): ProjectInfo | unde
   return projects.find(project => project.name.toLocaleLowerCase() === normalized)
 }
 
+function projectByArgument(projects: ProjectInfo[], argument: string): ProjectInfo | undefined {
+  if (!/^\d+$/u.test(argument)) return exactProject(projects, argument)
+  const index = Number(argument)
+  if (!Number.isSafeInteger(index) || index < 1) return undefined
+  return projects[index - 1]
+}
+
 export class FeishuCommandController {
   constructor(
     private readonly bridge: HarnessBridge,
@@ -98,10 +105,20 @@ export class FeishuCommandController {
     }
 
     if (text.startsWith('/up')) {
-      const name = argumentAfter(text, '/up')
-      if (name.length === 0) return { text: '用法：/up + 项目名' }
-      const project = exactProject(await this.bridge.listProjects(), name)
-      if (project === undefined) return { text: `未找到项目：${name}` }
+      const argument = argumentAfter(text, '/up')
+      if (argument.length === 0) return { text: '用法：/up + 项目名或索引，例如 /up + 1' }
+      const projects = await this.bridge.listProjects()
+      if (/^[+-]?\d+(?:\.\d+)?$/u.test(argument)) {
+        const index = Number(argument)
+        if (!Number.isSafeInteger(index) || index < 1) return { text: '用法：/up + 项目名或索引，例如 /up + 1' }
+        const project = projects[index - 1]
+        if (project === undefined) return { text: `项目索引超出范围：${argument}` }
+        const next = { projectId: project.id }
+        await this.selections.set(chatId, next)
+        return { text: `已进入项目：${project.name}`, selection: next }
+      }
+      const project = projectByArgument(projects, argument)
+      if (project === undefined) return { text: `未找到项目：${argument}` }
       const next = { projectId: project.id }
       await this.selections.set(chatId, next)
       return { text: `已进入项目：${project.name}`, selection: next }
@@ -117,13 +134,13 @@ export class FeishuCommandController {
     }
 
     if (text === '/lc') {
-      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名 进入项目。' }
+      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名或索引 进入项目。' }
       const conversations = await this.bridge.listConversations(selection.projectId)
       return { text: formatConversations(conversations, selection.conversationId) }
     }
 
     if (text.startsWith('/uc')) {
-      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名 进入项目。' }
+      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名或索引 进入项目。' }
       const rawIndex = argumentAfter(text, '/uc')
       const index = Number(rawIndex)
       if (!Number.isSafeInteger(index) || index < 1) return { text: '用法：/uc + 索引，例如 /uc + 1' }
@@ -138,7 +155,7 @@ export class FeishuCommandController {
     }
 
     if (text === '/nc') {
-      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名 进入项目。' }
+      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名或索引 进入项目。' }
       const conversation = await this.bridge.createConversation(selection.projectId)
       const next = { ...selection, conversationId: conversation.id }
       await this.selections.set(chatId, next)

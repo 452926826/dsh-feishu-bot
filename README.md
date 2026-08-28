@@ -27,7 +27,7 @@ Publish the application as instructed by Feishu, then add the bot to a group or 
 ## Commands
 
 - `/lp`: list projects
-- `/up + project name`: select an existing project
+- `/up + project name or index`: select an existing project by name or by the one-based index shown by `/lp`, for example `/up + 2`
 - `/np + project name`: create and select a project under the projects root
 - `/lc`: list conversations in the current project with one-based indexes
 - `/uc + index`: select a conversation and return its two latest user/assistant messages

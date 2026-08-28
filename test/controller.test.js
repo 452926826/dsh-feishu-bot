@@ -9,7 +9,10 @@ class MemoryStore {
 }
 
 function fixture() {
-  const projects = [{ id: 'p1', name: 'alpha', path: '/projects/alpha' }]
+  const projects = [
+    { id: 'p1', name: 'alpha', path: '/projects/alpha' },
+    { id: 'p2', name: 'beta', path: '/projects/beta' },
+  ]
   const conversations = [{ id: 'c1', name: 'first chat' }, { id: 'c2', name: 'second chat' }]
   const bridge = {
     async listProjects() { return projects },
@@ -19,7 +22,7 @@ function fixture() {
       return project
     },
     async listConversations(projectId) {
-      assert.equal(projectId, 'p1')
+      assert.ok(projects.some(project => project.id === projectId))
       return conversations
     },
     async createConversation(projectId) {
@@ -42,7 +45,16 @@ function fixture() {
 
 test('lists projects with one-based display', async () => {
   const { controller } = fixture()
-  assert.equal((await controller.handle('chat', '/lp')).text, '1，alpha')
+  assert.equal((await controller.handle('chat', '/lp')).text, '1，alpha\n2，beta')
+})
+
+test('selects a project by one-based index or exact name', async () => {
+  const { controller, store } = fixture()
+  assert.equal((await controller.handle('indexed', '/up + 2')).text, '已进入项目：beta')
+  assert.deepEqual(await store.get('indexed'), { projectId: 'p2' })
+  assert.equal((await controller.handle('named', '/up + alpha')).text, '已进入项目：alpha')
+  assert.match((await controller.handle('invalid', '/up + 0')).text, /用法/u)
+  assert.match((await controller.handle('missing', '/up + 9')).text, /超出范围/u)
 })
 
 test('selects project and conversation and returns two history messages', async () => {
@@ -59,8 +71,8 @@ test('selects project and conversation and returns two history messages', async 
 
 test('creates project and conversation and updates selection', async () => {
   const { controller, store } = fixture()
-  assert.equal((await controller.handle('chat', '/np + beta')).text, '已创建并进入项目：beta')
-  assert.deepEqual(await store.get('chat'), { projectId: 'p2' })
+  assert.equal((await controller.handle('chat', '/np + gamma')).text, '已创建并进入项目：gamma')
+  assert.deepEqual(await store.get('chat'), { projectId: 'p3' })
 
   await controller.handle('other', '/up + alpha')
   assert.equal((await controller.handle('other', '/nc')).text, '已创建并进入对话：new chat')

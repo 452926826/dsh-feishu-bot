@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added one-based project index selection with `/up + index` while preserving exact-name selection.
+
 ## 0.1.4
 
 - Added QR-code application creation and credential binding.
