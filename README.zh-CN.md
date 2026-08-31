@@ -30,7 +30,8 @@
 - `/up + 项目名或索引`：按项目名或 `/lp` 显示的一基索引进入已有项目，例如 `/up + 2`
 - `/np + 项目名`：在项目根目录创建并进入新项目
 - `/lc`：按从 1 开始的索引列出当前项目全部对话
-- `/uc + 索引`：进入对话，并返回最近 2 条用户/助手消息
+- `/uc`：直接进入最近完成的对话，并返回最近 2 条用户/助手消息
+- `/uc + 索引`：按 `/lc` 显示的索引进入对话，并返回最近 2 条用户/助手消息
 - `/nc`：在当前项目创建并进入新对话
 - `/approve`：批准当前待审批操作一次
 - `/reject`：拒绝当前待审批操作
@@ -42,7 +43,7 @@
 
 当当前对话中的工具需要审批时，机器人会主动发送工具名、原因和参数摘要。仅发起该 Harness 对话的飞书会话可以回复 `/approve`（只批准本次）或 `/reject`；发送失败、超时和没有对应飞书会话时均拒绝或交给其他已配置的审批渠道处理。
 
-项目和对话选择按飞书 `chat_id` 隔离，并持久化到 `$DSH_HOME/feishu-bot/state.json`。
+项目和对话选择按飞书 `chat_id` 隔离，并持久化到 `$DSH_HOME/feishu-bot/state.json`。每个对话完成后，机器人会向发起 chat 发送完成通知；配置 `FEISHU_NOTIFY_CHATS` 后也会广播给指定 chat。通知中回复 `/uc` 可直接进入最近完成的对话。
 
 ## 环境变量
 
@@ -52,6 +53,8 @@
 export FEISHU_PROJECTS_ROOT='/absolute/path/to/projects'
 # 推荐：只允许这些飞书 chat_id 操作 Harness，逗号分隔。
 export FEISHU_ALLOWED_CHATS='oc_xxx,oc_yyy'
+# 可选：向这些 chat 广播任意 Harness 对话完成通知；默认至少通知发起对话的 chat。
+export FEISHU_NOTIFY_CHATS='oc_ops,oc_owner'
 ```
 
 仍支持手工凭据，环境变量的优先级高于扫码保存的凭据：

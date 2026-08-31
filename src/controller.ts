@@ -12,6 +12,7 @@ export interface ConversationInfo {
 export interface ChatSelection {
   projectId?: string
   conversationId?: string
+  lastCompletedConversationId?: string
 }
 
 export interface HarnessBridge {
@@ -20,6 +21,7 @@ export interface HarnessBridge {
   listConversations(projectId: string): Promise<ConversationInfo[]>
   createConversation(projectId: string): Promise<ConversationInfo>
   recentMessages(conversationId: string, count: number): Promise<string[]>
+  conversationInfo(conversationId: string): Promise<ConversationInfo | undefined>
   converse(conversationId: string, text: string, chatId: string): Promise<string>
   respondToApproval(chatId: string, decision: 'approve' | 'reject'): string
 }
@@ -27,6 +29,11 @@ export interface HarnessBridge {
 export interface SelectionStore {
   get(chatId: string): Promise<ChatSelection>
   set(chatId: string, selection: ChatSelection): Promise<void>
+}
+
+export type ConversationCompleted = {
+  conversationId: string
+  chatId: string
 }
 
 export type ControllerResult = {
@@ -86,6 +93,11 @@ export class FeishuCommandController {
     private readonly selections: SelectionStore,
   ) {}
 
+  async markConversationCompleted(chatId: string, conversationId: string): Promise<void> {
+    const selection = await this.selections.get(chatId)
+    await this.selections.set(chatId, { ...selection, lastCompletedConversationId: conversationId })
+  }
+
   async handle(chatId: string, input: string): Promise<ControllerResult> {
     const text = input.trim()
     if (text.length === 0) return { text: HELP }
@@ -140,14 +152,26 @@ export class FeishuCommandController {
     }
 
     if (text.startsWith('/uc')) {
-      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名或索引 进入项目。' }
       const rawIndex = argumentAfter(text, '/uc')
+      if (rawIndex.length === 0) {
+        if (selection.lastCompletedConversationId === undefined) return { text: '还没有可进入的已完成对话。请使用 /uc + 索引进入对话。' }
+        const conversation = await this.bridge.conversationInfo(selection.lastCompletedConversationId)
+        if (conversation === undefined) return { text: '最近完成的对话已不存在，请使用 /lc 查看当前项目对话。' }
+        const next = { ...selection, conversationId: conversation.id }
+        delete next.lastCompletedConversationId
+        await this.selections.set(chatId, next)
+        const history = await this.bridge.recentMessages(conversation.id, 2)
+        const suffix = history.length === 0 ? '\n暂无历史记录。' : `\n最近 2 条记录：\n${history.join('\n')}`
+        return { text: `已进入对话：${conversation.name}${suffix}`, selection: next }
+      }
+      if (selection.projectId === undefined) return { text: '请先使用 /up + 项目名或索引 进入项目。' }
       const index = Number(rawIndex)
       if (!Number.isSafeInteger(index) || index < 1) return { text: '用法：/uc + 索引，例如 /uc + 1' }
       const conversations = await this.bridge.listConversations(selection.projectId)
       const conversation = conversations[index - 1]
       if (conversation === undefined) return { text: `对话索引超出范围：${rawIndex}` }
       const next = { ...selection, conversationId: conversation.id }
+      delete next.lastCompletedConversationId
       await this.selections.set(chatId, next)
       const history = await this.bridge.recentMessages(conversation.id, 2)
       const suffix = history.length === 0 ? '\n暂无历史记录。' : `\n最近 2 条记录：\n${history.join('\n')}`

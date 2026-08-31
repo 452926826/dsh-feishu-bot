@@ -18,17 +18,24 @@ interface HarnessContext extends Context {
     sessionPersistence: SessionPersistence;
 }
 export declare function userMessage(text: string): UserMessage;
+export interface ConversationCompletedEvent {
+    conversationId: string;
+    chatId: string;
+    reply: string;
+}
 export declare class DshHarnessBridge implements HarnessBridge {
     private readonly ctx;
     private readonly projectsRoot;
     private readonly approvals;
+    private readonly onCompleted?;
     private readonly handles;
     private readonly queues;
-    constructor(ctx: HarnessContext, projectsRoot: string, approvals: ApprovalRouter);
+    constructor(ctx: HarnessContext, projectsRoot: string, approvals: ApprovalRouter, onCompleted?: ((event: ConversationCompletedEvent) => Promise<void> | void) | undefined);
     listProjects(): Promise<ProjectInfo[]>;
     createProject(name: string): Promise<ProjectInfo>;
     listConversations(projectId: string): Promise<ConversationInfo[]>;
     createConversation(projectId: string): Promise<ConversationInfo>;
+    conversationInfo(conversationId: string): Promise<ConversationInfo | undefined>;
     recentMessages(conversationId: string, count: number): Promise<string[]>;
     converse(conversationId: string, text: string, chatId: string): Promise<string>;
     respondToApproval(chatId: string, decision: 'approve' | 'reject'): string;

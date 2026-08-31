@@ -24,6 +24,10 @@ function csv(value: string | undefined): Set<string> {
   return new Set((value ?? '').split(',').map(item => item.trim()).filter(Boolean))
 }
 
+function completionTargets(): Set<string> {
+  return csv(process.env.FEISHU_NOTIFY_CHATS ?? process.env.FEISHU_ALLOWED_CHATS)
+}
+
 export function apply(ctx: Context): void {
   const logger = ctx.logger('feishu-bot')
   const home = process.env.DSH_HOME ?? join(process.env.HOME ?? '.', '.dsh')
@@ -80,8 +84,22 @@ export function apply(ctx: Context): void {
       signal: abort.signal,
     })
     if (abort.signal.aborted) return
-    const bridge = new DshHarnessBridge(ctx as ConstructorParameters<typeof DshHarnessBridge>[0], projectsRoot, approvals)
-    const controller = new FeishuCommandController(bridge, new JsonSelectionStore(statePath))
+    const selections = new JsonSelectionStore(statePath)
+    let bridge: DshHarnessBridge
+    let controller: FeishuCommandController
+    const notify = async ({ conversationId, chatId, reply }: import('./harness.js').ConversationCompletedEvent): Promise<void> => {
+      const targets = completionTargets()
+      targets.add(chatId)
+      const info = await bridge.conversationInfo(conversationId)
+      const title = info?.name ?? conversationId
+      const text = `对话已完成：${title}\n${reply}\n\n回复 /uc 可直接进入最近完成的对话。`
+      await Promise.all([...targets].map(async target => {
+        await controller.markConversationCompleted(target, conversationId)
+        await bot?.sendText(target, text)
+      }))
+    }
+    bridge = new DshHarnessBridge(ctx as ConstructorParameters<typeof DshHarnessBridge>[0], projectsRoot, approvals, notify)
+    controller = new FeishuCommandController(bridge, selections)
     bot = new FeishuBot({
       ...credentials,
       allowedChats: csv(process.env.FEISHU_ALLOWED_CHATS),

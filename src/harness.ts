@@ -78,6 +78,12 @@ function lastAssistantText(events: readonly SessionEvent[], fromSeq: number): st
   return messages.at(-1)?.replace(/^Harness：/u, '') ?? 'Harness 已处理消息，但没有返回文本内容。'
 }
 
+export interface ConversationCompletedEvent {
+  conversationId: string
+  chatId: string
+  reply: string
+}
+
 export class DshHarnessBridge implements HarnessBridge {
   private readonly handles = new Map<string, AgentHandle>()
   private readonly queues = new Map<string, Promise<unknown>>()
@@ -86,6 +92,7 @@ export class DshHarnessBridge implements HarnessBridge {
     private readonly ctx: HarnessContext,
     private readonly projectsRoot: string,
     private readonly approvals: ApprovalRouter,
+    private readonly onCompleted?: (event: ConversationCompletedEvent) => Promise<void> | void,
   ) {}
 
   async listProjects(): Promise<ProjectInfo[]> {
@@ -126,6 +133,15 @@ export class DshHarnessBridge implements HarnessBridge {
     return { id: sessionId, name: `新对话 ${sessionId.slice(-8)}` }
   }
 
+  async conversationInfo(conversationId: string): Promise<ConversationInfo | undefined> {
+    const workspace = this.ctx.workspaceRegistry.list().find(item => item.sessionIds.includes(asSessionId(conversationId)))
+    if (workspace === undefined) return undefined
+    const id = asSessionId(conversationId)
+    const live = this.ctx.agents.get(id)?.session
+    const events = live?.events ?? (await this.ctx.sessionPersistence.inspect(id)).events
+    return { id: conversationId, name: titleFor(conversationId, events) }
+  }
+
   async recentMessages(conversationId: string, count: number): Promise<string[]> {
     const id = asSessionId(conversationId)
     const live = this.ctx.agents.get(id)?.session
@@ -157,7 +173,13 @@ export class DshHarnessBridge implements HarnessBridge {
       agent.followup(userMessage(text))
       await agent.whenIdle()
       await this.ctx.sessions.flush(agent.session)
-      return lastAssistantText(agent.session.events, fromSeq)
+      const reply = lastAssistantText(agent.session.events, fromSeq)
+      try {
+        await this.onCompleted?.({ conversationId, chatId, reply })
+      } catch {
+        // Completion notifications are best-effort and must not hide a completed answer.
+      }
+      return reply
     } finally {
       route.dispose()
     }

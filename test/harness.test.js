@@ -17,6 +17,20 @@ test('creates a core-compatible immutable user message', () => {
   assert.equal(Object.isFrozen(message.source), true)
 })
 
+test('does not fail a completed conversation when notification delivery fails', async () => {
+  const events = [{
+    type: 'assistant/message',
+    data: { message: { content: [{ type: 'text', text: 'done' }] } },
+  }]
+  const agent = {
+    session: { id: 'session-notify', seq: 0, events },
+    followup() {},
+    async whenIdle() {},
+  }
+  const bridge = new DshHarnessBridge({ agents: { get: () => agent }, sessions: { async flush() {} } }, '/projects', { bind: () => ({ dispose() {} }), respond: () => 'ok' }, async () => { throw new Error('Feishu unavailable') })
+  assert.equal(await bridge.converse('session-notify', 'hello', 'chat-1'), 'done')
+})
+
 test('binds approvals to the originating chat only while a conversation runs', async () => {
   const calls = []
   const events = []
@@ -41,9 +55,11 @@ test('binds approvals to the originating chat only while a conversation runs', a
     agents: { get: () => agent },
     sessions: { async flush() {} },
   }
-  const bridge = new DshHarnessBridge(ctx, '/projects', approvals)
+  const completed = []
+  const bridge = new DshHarnessBridge(ctx, '/projects', approvals, event => completed.push(event))
 
   assert.equal(await bridge.converse('session-1', 'hello', 'chat-1'), 'done')
+  assert.deepEqual(completed, [{ conversationId: 'session-1', chatId: 'chat-1', reply: 'done' }])
   assert.deepEqual(calls, ['bind:session-1:chat-1', 'dispose:session-1:chat-1'])
   assert.equal(bridge.respondToApproval('chat-1', 'reject'), 'chat-1:reject')
 })

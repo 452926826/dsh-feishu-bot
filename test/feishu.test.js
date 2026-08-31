@@ -26,6 +26,11 @@ test('splitText keeps Unicode code points intact', () => {
   assert.deepEqual(splitText('😀😀😀', 2), ['😀😀', '😀'])
 })
 
+test('formats completion notifications with a bare /uc hint', () => {
+  const text = '对话已完成：demo\nanswer\n\n回复 /uc 可直接进入最近完成的对话。'
+  assert.match(text, /回复 \/uc/u)
+})
+
 test('shows a thinking message and replaces it with the reply', async () => {
   const calls = []
   await runWithThinkingMessage({

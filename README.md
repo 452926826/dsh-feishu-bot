@@ -30,7 +30,8 @@ Publish the application as instructed by Feishu, then add the bot to a group or 
 - `/up + project name or index`: select an existing project by name or by the one-based index shown by `/lp`, for example `/up + 2`
 - `/np + project name`: create and select a project under the projects root
 - `/lc`: list conversations in the current project with one-based indexes
-- `/uc + index`: select a conversation and return its two latest user/assistant messages
+- `/uc`: enter the most recently completed conversation and return its two latest user/assistant messages
+- `/uc + index`: select a conversation by the index shown by `/lc` and return its two latest user/assistant messages
 - `/nc`: create and select a conversation in the current project
 - `/approve`: approve the current pending operation once
 - `/reject`: reject the current pending operation
@@ -42,7 +43,7 @@ The bot first sends a thinking placeholder and updates it with the final answer.
 
 When a tool requests approval, the bot sends the tool name, reason, and an argument summary. Only the Feishu chat that initiated the Harness conversation can answer with `/approve` or `/reject`. Failed delivery, timeouts, and conversations without a Feishu route are rejected or passed to another configured approval channel.
 
-Project and conversation selections are isolated by Feishu `chat_id` and persisted in `$DSH_HOME/feishu-bot/state.json`.
+Project and conversation selections are isolated by Feishu `chat_id` and persisted in `$DSH_HOME/feishu-bot/state.json`. After every conversation completes, the bot notifies the originating chat; `FEISHU_NOTIFY_CHATS` can broadcast the notification to additional chats. Reply `/uc` to enter the most recently completed conversation directly.
 
 ## Environment variables
 
@@ -52,6 +53,9 @@ QR binding does not require App ID or App Secret. Optional settings:
 export FEISHU_PROJECTS_ROOT='/absolute/path/to/projects'
 # Recommended: comma-separated Feishu chat IDs allowed to operate Harness.
 export FEISHU_ALLOWED_CHATS='oc_xxx,oc_yyy'
+# Optional: broadcast every completed Harness conversation to these chats.
+# The originating chat is always notified as well.
+export FEISHU_NOTIFY_CHATS='oc_ops,oc_owner'
 ```
 
 Manual credentials are still supported and take precedence over saved QR-binding credentials:

@@ -36,6 +36,9 @@ function fixture() {
       assert.equal(count, 2)
       return ['你：hello', 'Harness：world']
     },
+    async conversationInfo(id) {
+      return id === 'c2' ? { id, name: 'second chat' } : undefined
+    },
     async converse(id, text) { return `${id}:${text}` },
     respondToApproval(chatId, decision) { return `${chatId}:${decision}` },
   }
@@ -55,6 +58,16 @@ test('selects a project by one-based index or exact name', async () => {
   assert.equal((await controller.handle('named', '/up + alpha')).text, '已进入项目：alpha')
   assert.match((await controller.handle('invalid', '/up + 0')).text, /用法/u)
   assert.match((await controller.handle('missing', '/up + 9')).text, /超出范围/u)
+})
+
+test('enters the most recently completed conversation with bare /uc', async () => {
+  const { controller, store } = fixture()
+  await store.set('chat', { projectId: 'p1', lastCompletedConversationId: 'c2' })
+  assert.equal(
+    (await controller.handle('chat', '/uc')).text,
+    '已进入对话：second chat\n最近 2 条记录：\n你：hello\nHarness：world',
+  )
+  assert.deepEqual(await store.get('chat'), { projectId: 'p1', conversationId: 'c2' })
 })
 
 test('selects project and conversation and returns two history messages', async () => {
