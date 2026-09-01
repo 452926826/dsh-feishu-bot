@@ -1,0 +1,2 @@
+export declare function completionNotificationTargets(configured: ReadonlySet<string>, originatingChatId: string, activeChats: ReadonlySet<string>): Set<string>;
+//# sourceMappingURL=notifications.d.ts.map
