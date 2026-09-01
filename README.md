@@ -39,11 +39,11 @@ Publish the application as instructed by Feishu, then add the bot to a group or 
 - `/help`: show help
 - Any other text: send it to the active Harness conversation and return the final answer to Feishu
 
-The bot first sends a thinking placeholder and updates it with the final answer. Replies longer than 3,500 Unicode characters are split into multiple messages at newline boundaries when possible, without splitting Unicode code points.
+The bot first sends a thinking placeholder and updates it with the final answer. Replies longer than 3,500 Unicode characters are split into multiple messages at newline boundaries when possible, without splitting Unicode code points. The Feishu WebSocket uses the SDK's automatic reconnect and heartbeat watchdog so short disconnects and half-open idle connections recover automatically.
 
 When a tool requests approval, the bot sends the tool name, reason, and an argument summary. Only the Feishu chat that initiated the Harness conversation can answer with `/approve` or `/reject`. Failed delivery, timeouts, and conversations without a Feishu route are rejected or passed to another configured approval channel.
 
-Project and conversation selections are isolated by Feishu `chat_id` and persisted in `$DSH_HOME/feishu-bot/state.json`. After every conversation completes, the bot notifies the originating chat; `FEISHU_NOTIFY_CHATS` can broadcast the notification to additional chats. Reply `/uc` to enter the most recently completed conversation directly.
+Project and conversation selections are isolated by Feishu `chat_id` and persisted in `$DSH_HOME/feishu-bot/state.json`. After every conversation completes, the bot notifies the originating chat; `FEISHU_NOTIFY_CHATS` can broadcast the notification to additional chats. A chat that is currently processing a message is excluded from completion notifications for other conversations, avoiding interruptions. Reply `/uc` to enter the most recently completed conversation directly.
 
 ## Environment variables
 

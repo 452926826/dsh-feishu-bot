@@ -12,6 +12,8 @@ export interface FeishuBotOptions {
     onMessage(message: FeishuInboundMessage): Promise<string>;
     onReady?(): void;
     onError(error: unknown): void;
+    onReconnecting?(): void;
+    pingTimeoutSeconds?: number;
 }
 export declare class FeishuBot {
     private readonly options;
@@ -19,6 +21,7 @@ export declare class FeishuBot {
     private readonly ws;
     private readonly dispatcher;
     private readonly seen;
+    private stopped;
     constructor(options: FeishuBotOptions);
     start(): void;
     stop(): Promise<void>;

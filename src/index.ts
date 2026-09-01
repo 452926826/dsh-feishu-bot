@@ -15,6 +15,7 @@ import {
   shouldRetryRegistration,
   type FeishuCredentials,
 } from './registration.js'
+import { completionNotificationTargets } from './notifications.js'
 import { JsonSelectionStore } from './state.js'
 
 export const name = 'feishu-bot'
@@ -39,6 +40,7 @@ export function apply(ctx: Context): void {
   const abort = new AbortController()
   let bot: FeishuBot | undefined
   let websocket: FeishuBindingView['websocket'] = 'disconnected'
+  const activeChats = new Set<string>()
   const approvals = new ApprovalCoordinator(async (chatId, text) => {
     if (bot === undefined) throw new Error('Feishu bot is not ready')
     await bot.sendText(chatId, text)
@@ -88,8 +90,7 @@ export function apply(ctx: Context): void {
     let bridge: DshHarnessBridge
     let controller: FeishuCommandController
     const notify = async ({ conversationId, chatId, reply }: import('./harness.js').ConversationCompletedEvent): Promise<void> => {
-      const targets = completionTargets()
-      targets.add(chatId)
+      const targets = completionNotificationTargets(completionTargets(), chatId, activeChats)
       const info = await bridge.conversationInfo(conversationId)
       const title = info?.name ?? conversationId
       const text = `对话已完成：${title}\n${reply}\n\n回复 /uc 可直接进入最近完成的对话。`
@@ -104,7 +105,14 @@ export function apply(ctx: Context): void {
       ...credentials,
       allowedChats: csv(process.env.FEISHU_ALLOWED_CHATS),
       allowedUsers: new Set(credentials.ownerOpenId === undefined ? [] : [credentials.ownerOpenId]),
-      onMessage: async message => (await controller.handle(message.chatId, message.text)).text,
+      onMessage: async message => {
+        activeChats.add(message.chatId)
+        try {
+          return (await controller.handle(message.chatId, message.text)).text
+        } finally {
+          activeChats.delete(message.chatId)
+        }
+      },
       onReady: () => {
         websocket = 'connected'
         logger.info(`connected by WebSocket; projects root: ${projectsRoot}`)
@@ -113,6 +121,11 @@ export function apply(ctx: Context): void {
         websocket = 'error'
         logger.error(error instanceof Error ? error.stack ?? error.message : String(error))
       },
+      onReconnecting: () => {
+        websocket = 'connecting'
+        logger.warn('Feishu WebSocket disconnected; reconnecting')
+      },
+      pingTimeoutSeconds: 90,
     })
     websocket = 'connecting'
     bot.start()

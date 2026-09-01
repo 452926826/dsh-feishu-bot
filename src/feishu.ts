@@ -27,6 +27,8 @@ export interface FeishuBotOptions {
   onMessage(message: FeishuInboundMessage): Promise<string>
   onReady?(): void
   onError(error: unknown): void
+  onReconnecting?(): void
+  pingTimeoutSeconds?: number
 }
 
 export class FeishuBot {
@@ -34,14 +36,19 @@ export class FeishuBot {
   private readonly ws: lark.WSClient
   private readonly dispatcher: lark.EventDispatcher
   private readonly seen = new Set<string>()
+  private stopped = true
 
   constructor(private readonly options: FeishuBotOptions) {
     this.client = new lark.Client({ appId: options.appId, appSecret: options.appSecret })
     this.ws = new lark.WSClient({
       appId: options.appId,
       appSecret: options.appSecret,
+      autoReconnect: true,
+      ...(options.pingTimeoutSeconds === undefined ? {} : { wsConfig: { pingTimeout: options.pingTimeoutSeconds } }),
       ...(options.onReady === undefined ? {} : { onReady: options.onReady }),
       onError: options.onError,
+      ...(options.onReconnecting === undefined ? {} : { onReconnecting: options.onReconnecting }),
+      ...(options.onReady === undefined ? {} : { onReconnected: options.onReady }),
     })
     this.dispatcher = new lark.EventDispatcher({}).register({
       'im.message.receive_v1': async (data: FeishuEvent) => this.receive(data),
@@ -49,13 +56,17 @@ export class FeishuBot {
   }
 
   start(): void {
+    if (!this.stopped) return
+    this.stopped = false
     void this.ws.start({ eventDispatcher: this.dispatcher }).catch(error => this.options.onError(error))
   }
 
   async stop(): Promise<void> {
+    this.stopped = true
     const stoppable = this.ws as unknown as { close?: () => Promise<void> | void }
     await stoppable.close?.()
   }
+
 
   async sendText(chatId: string, text: string): Promise<void> {
     await this.send(chatId, text)
