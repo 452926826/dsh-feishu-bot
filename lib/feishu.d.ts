@@ -27,6 +27,15 @@ export declare class FeishuBot {
     stop(): Promise<void>;
     sendText(chatId: string, text: string): Promise<void>;
     private receive;
+    /**
+     * Runs `run` while showing a reaction-based status indicator on the
+     * triggering message: 🤔 (THINKING) while processing, swapped to ✅ (DONE)
+     * once the turn has completed. Reaction calls are best-effort: a missing
+     * scope or an unsupported emoji only logs and never breaks processing.
+     * Requires the app-identity scope `im:message.reactions:write_only` on the
+     * Feishu application (tenant_access_token calls).
+     */
+    private runWithReactionIndicator;
     private send;
     private sendOne;
     private update;

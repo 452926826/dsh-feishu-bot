@@ -45,6 +45,13 @@ When a tool requests approval, the bot sends the tool name, reason, and an argum
 
 Project and conversation selections are isolated by Feishu `chat_id` and persisted in `$DSH_HOME/feishu-bot/state.json`. After every conversation completes, the bot notifies the originating chat; `FEISHU_NOTIFY_CHATS` can broadcast the notification to additional chats. A chat that is currently processing a message is excluded from completion notifications for other conversations, avoiding interruptions. Reply `/uc` to enter the most recently completed conversation directly.
 
+## Status indicator (reactions)
+
+While a message is being processed the bot no longer posts a "思考中…" placeholder; instead it reacts to the triggering message with 🤔 (THINKING). When the turn completes it removes 🤔 and leaves ✅ (DONE). The final answer is delivered as a single `对话已完成：…` message containing the full reply, avoiding duplicate content caused by placeholder updates.
+
+- Requires the **app-identity** scope `im:message.reactions:write_only` (the user-identity variant does not work with tenant tokens), granted in the Feishu console and shipped in a new app-version release;
+- Reaction calls are best-effort: a missing scope or an unsupported emoji only logs and never affects processing.
+
 ## Environment variables
 
 QR binding does not require App ID or App Secret. Optional settings:

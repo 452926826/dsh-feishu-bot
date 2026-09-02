@@ -90,18 +90,66 @@ export class FeishuBot {
     }
     if (text.length === 0) return
 
-    await runWithThinkingMessage({
-      onMessage: () => this.options.onMessage({
+    await this.runWithReactionIndicator(
+      message.chat_id as string,
+      message.message_id as string,
+      () => this.options.onMessage({
         chatId: message.chat_id as string,
         messageId: message.message_id as string,
         ...(senderOpenId === undefined ? {} : { senderOpenId }),
         text,
       }),
-      sendThinking: () => this.sendOne(message.chat_id as string, '思考中…'),
-      update: (messageId, reply) => this.update(messageId, message.chat_id as string, reply),
-      send: reply => this.send(message.chat_id as string, reply),
-      onError: this.options.onError,
-    })
+    )
+  }
+
+  /**
+   * Runs `run` while showing a reaction-based status indicator on the
+   * triggering message: 🤔 (THINKING) while processing, swapped to ✅ (DONE)
+   * once the turn has completed. Reaction calls are best-effort: a missing
+   * scope or an unsupported emoji only logs and never breaks processing.
+   * Requires the app-identity scope `im:message.reactions:write_only` on the
+   * Feishu application (tenant_access_token calls).
+   */
+  private async runWithReactionIndicator(chatId: string, messageId: string, run: () => Promise<string>): Promise<void> {
+    let reactionId: string | undefined
+    let failed = false
+    try {
+      const created = await this.client.im.messageReaction.create({
+        path: { message_id: messageId },
+        data: { reaction_type: { emoji_type: 'THINKING' } },
+      })
+      reactionId = created.data?.reaction_id
+    } catch (error) {
+      this.options.onError(error)
+    }
+    try {
+      await run()
+    } catch (error) {
+      failed = true
+      this.options.onError(error)
+      const detail = error instanceof Error ? error.message : String(error)
+      await this.send(chatId, `操作失败：${detail}`).catch(this.options.onError)
+    } finally {
+      if (reactionId !== undefined) {
+        try {
+          await this.client.im.messageReaction.delete({
+            path: { message_id: messageId, reaction_id: reactionId },
+          })
+        } catch (error) {
+          this.options.onError(error)
+        }
+      }
+      if (!failed) {
+        try {
+          await this.client.im.messageReaction.create({
+            path: { message_id: messageId },
+            data: { reaction_type: { emoji_type: 'DONE' } },
+          })
+        } catch (error) {
+          this.options.onError(error)
+        }
+      }
+    }
   }
 
   private async send(chatId: string, text: string): Promise<void> {
