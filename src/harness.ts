@@ -169,11 +169,18 @@ export class DshHarnessBridge implements HarnessBridge {
     try {
       const id = asSessionId(conversationId)
       const agent = await this.ensureAgent(id)
-      const fromSeq = agent.session.seq
+      const fromSeq = agent.session?.seq ?? 0
       agent.followup(userMessage(text))
       await agent.whenIdle()
       await this.ctx.sessions.flush(agent.session)
-      const reply = lastAssistantText(agent.session.events, fromSeq)
+      // On dsh >= 0.1.2-alpha the live session may no longer expose `events`
+      // after the agent goes idle; fall back to the persisted session log so a
+      // completed turn still produces a reply instead of crashing on
+      // `events.slice(fromSeq)` with an undefined value.
+      const events = agent.session?.events
+        ?? (await this.ctx.sessionPersistence.inspect(id)).events
+        ?? []
+      const reply = lastAssistantText(events, fromSeq)
       try {
         await this.onCompleted?.({ conversationId, chatId, reply })
       } catch {
