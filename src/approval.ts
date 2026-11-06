@@ -50,11 +50,15 @@ export class ApprovalCoordinator {
     try {
       await this.send(chatId, formatApprovalPrompt(prompt))
     } catch {
-      this.pending.delete(chatId)
+      if (this.pending.get(chatId) === pending) this.pending.delete(chatId)
       prompt.signal?.removeEventListener('abort', onAbort)
       return undefined
     }
     return answer
+  }
+
+  hasRoute(sessionId: string): boolean {
+    return this.routes.has(sessionId)
   }
 
   respond(chatId: string, decision: ApprovalDecision): string {
@@ -76,24 +80,27 @@ export class ApprovalCoordinator {
 }
 
 interface HarnessApprovalRequest {
-  agent: {
-    session: {
-      id: string
-      events: ReadonlyArray<{ type: string; data?: unknown }>
-    }
-  }
+  agent: { session: { id: string } }
   toolName: string
   callId?: unknown
   reason?: string
   signal?: AbortSignal
 }
 
+interface ToolCallEvent {
+  type: string
+  data?: unknown
+}
+
 export async function handleApprovalRequest(
   approvals: ApprovalCoordinator,
   request: HarnessApprovalRequest,
   next: () => Promise<'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'>,
+  readSession: (id: string) => Promise<{ events: readonly ToolCallEvent[] }>,
 ): Promise<'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'> {
-  const call = request.callId === undefined ? undefined : request.agent.session.events.find(event => {
+  if (!approvals.hasRoute(request.agent.session.id)) return next()
+  const events = request.callId === undefined ? [] : (await readSession(request.agent.session.id)).events
+  const call = events.find(event => {
     if (event.type !== 'tool/call') return false
     return ((event.data ?? {}) as { callId?: unknown }).callId === request.callId
   })

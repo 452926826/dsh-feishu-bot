@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ApprovalRequest, ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { ApprovalCoordinator, handleApprovalRequest } from './approval.js'
 import { readBindingView, type FeishuBindingView } from './binding-status.js'
 import { FeishuCommandController } from './controller.js'
@@ -19,7 +20,7 @@ import { completionNotificationTargets } from './notifications.js'
 import { JsonSelectionStore } from './state.js'
 
 export const name = 'feishu-bot'
-export const inject = ['agents', 'sessions', 'sessionPersistence', 'workspaceRegistry', 'webServer', 'approval']
+export const inject = ['agents', 'sessions', 'sessionQuery', 'workspaceRegistry', 'webServer', 'approval']
 
 function csv(value: string | undefined): Set<string> {
   return new Set((value ?? '').split(',').map(item => item.trim()).filter(Boolean))
@@ -46,7 +47,7 @@ export function apply(ctx: Context): void {
     await bot.sendText(chatId, text)
   })
   ctx.on('approval/request', (request: ApprovalRequest, next: () => Promise<ApprovalOutcome>) => {
-    return handleApprovalRequest(approvals, request, next)
+    return handleApprovalRequest(approvals, request, next, id => ctx.sessionQuery.readSession(id as SessionId))
   }, { prepend: true })
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',

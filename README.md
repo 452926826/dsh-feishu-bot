@@ -4,6 +4,10 @@ English | [简体中文](README.zh-CN.md)
 
 Use DeepSeek Harness through a Feishu application bot over a WebSocket long connection, without exposing a public callback URL. On first start, the plugin can create and bind a Feishu application through a QR code, so App ID and App Secret do not need to be copied manually.
 
+## Compatibility
+
+Requires Node.js 20 or later and DSH `>=0.2.2-rc.1 <0.3.0-0`, with the host-provided session-query, approval, workspace and web-server services. The build was tested against DSH package types `0.2.2-rc.1`; an offline lifecycle smoke used real Cordis `4.1.0` with stubbed DSH services and Feishu bot start/stop, not a full DSH host. Other versions in the declared range have not been individually verified. This release is not compatible with older DSH interfaces. Feishu connectivity and QR registration require separate end-to-end verification.
+
 ## QR-code binding
 
 When no credentials are available, the plugin starts Feishu's OAuth 2.0 Device Authorization Grant application-creation flow, renders a QR code in the DSH terminal, and writes it to:
@@ -79,7 +83,7 @@ Other optional variables:
 Install a release archive copied to the target machine:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/dsh-feishu-bot-0.1.4.tgz
+dsh plugin --profile web add /absolute/path/to/dsh-feishu-bot-0.1.5.tgz
 ```
 
 If installation reports `Ignored build scripts: protobufjs`, edit the target profile's `pnpm-workspace.yaml` and add:

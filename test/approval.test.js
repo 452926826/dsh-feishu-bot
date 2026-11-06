@@ -64,7 +64,11 @@ test('adapts a Harness approval request with its tool arguments', async () => {
   const pending = handleApprovalRequest(approvals, request, async () => {
     nextCalls++
     return 'unavailable'
+  }, async id => {
+    assert.equal(id, 'session-1')
+    return { events: request.agent.session.events }
   })
+  await Promise.resolve()
   await Promise.resolve()
 
   assert.match(sent[0], /npm install/u)
@@ -92,6 +96,24 @@ test('passes approvals without a Feishu route to the next answerer', async () =>
   const outcome = await handleApprovalRequest(approvals, {
     agent: { session: { id: 'other-session', events: [] } },
     toolName: 'edit',
-  }, async () => 'rejected')
+    callId: 'call-1',
+  }, async () => 'rejected', async () => { throw new Error('unrouted approvals must not query events') })
   assert.equal(outcome, 'rejected')
+})
+
+test('a failed cancelled delivery cannot remove a newer pending approval', async () => {
+  let failFirst
+  const approvals = new ApprovalCoordinator(() => new Promise((_resolve, reject) => { failFirst = reject }))
+  const route = approvals.bind('session-1', 'chat-1')
+  const abort = new AbortController()
+  const first = approvals.request({ sessionId: 'session-1', toolName: 'first', signal: abort.signal })
+  const fail = failFirst
+  abort.abort()
+  const second = approvals.request({ sessionId: 'session-1', toolName: 'second' })
+  fail(new Error('delivery failed'))
+  assert.equal(await first, undefined)
+  assert.equal(approvals.respond('chat-1', 'approve'), '已批准本次操作。')
+  failFirst(new Error('delivery failed'))
+  await second
+  route.dispose()
 })

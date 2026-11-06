@@ -16,6 +16,7 @@ export declare class ApprovalCoordinator {
         dispose(): void;
     };
     request(prompt: ApprovalPrompt): Promise<ApprovalOutcome | undefined>;
+    hasRoute(sessionId: string): boolean;
     respond(chatId: string, decision: ApprovalDecision): string;
     private settle;
 }
@@ -23,10 +24,6 @@ interface HarnessApprovalRequest {
     agent: {
         session: {
             id: string;
-            events: ReadonlyArray<{
-                type: string;
-                data?: unknown;
-            }>;
         };
     };
     toolName: string;
@@ -34,7 +31,13 @@ interface HarnessApprovalRequest {
     reason?: string;
     signal?: AbortSignal;
 }
-export declare function handleApprovalRequest(approvals: ApprovalCoordinator, request: HarnessApprovalRequest, next: () => Promise<'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'>): Promise<'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'>;
+interface ToolCallEvent {
+    type: string;
+    data?: unknown;
+}
+export declare function handleApprovalRequest(approvals: ApprovalCoordinator, request: HarnessApprovalRequest, next: () => Promise<'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'>, readSession: (id: string) => Promise<{
+    events: readonly ToolCallEvent[];
+}>): Promise<'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'>;
 export declare function formatApprovalPrompt(prompt: ApprovalPrompt): string;
 export {};
 //# sourceMappingURL=approval.d.ts.map

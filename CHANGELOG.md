@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.5
+
+- Migrated session history and titles to the DSH session-query service and aligned approval handling with DSH 0.2.2-rc.1.
+- Require DSH >=0.2.2-rc.1 and <0.3.0-0; added offline Cordis lifecycle and approval regression coverage.
+- Prevent a cancelled approval delivery from removing a later pending approval.
 
 - Added one-based project index selection with `/up + index` while preserving exact-name selection.
 - Added completion notifications for every conversation, configurable with `FEISHU_NOTIFY_CHATS`.

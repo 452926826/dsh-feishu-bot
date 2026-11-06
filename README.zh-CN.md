@@ -4,6 +4,10 @@
 
 通过飞书应用机器人 WebSocket 长连接使用 DeepSeek Harness，不需要公网回调地址。首次启动可通过二维码一键创建并绑定飞书应用，无需手工复制 App ID/Secret。
 
+## 兼容性
+
+需要 Node.js 20 或更高版本，以及 DSH `>=0.2.2-rc.1 <0.3.0-0` 和宿主提供的 session-query、审批、工作区及 Web 服务。构建使用 DSH `0.2.2-rc.1` 包类型验证；离线生命周期 smoke 使用真实 Cordis `4.1.0`，DSH 服务和飞书机器人启动、停止均为桩，并非完整 DSH 宿主验证。声明范围内的其他版本尚未逐一验证。本版本不兼容旧版 DSH 接口。飞书连接及扫码注册仍需单独端到端验证。
+
 ## 扫码绑定
 
 插件未找到现有凭据时会自动调用飞书官方 OAuth 2.0 Device Authorization Grant 一键创建应用流程，在 DSH 终端日志直接显示二维码，并生成：
@@ -78,7 +82,7 @@ export FEISHU_APP_SECRET='xxx'
 将发布归档复制到目标机器后安装：
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/dsh-feishu-bot-0.1.4.tgz
+dsh plugin --profile web add /absolute/path/to/dsh-feishu-bot-0.1.5.tgz
 ```
 
 如果安装提示 `Ignored build scripts: protobufjs`，编辑目标 profile 的 `pnpm-workspace.yaml`，加入：

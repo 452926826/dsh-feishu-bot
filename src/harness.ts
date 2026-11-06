@@ -5,7 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SessionId, SessionStore } from '@deepseek-ai/dsh-session'
-import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
+import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import type { ConversationInfo, HarnessBridge, ProjectInfo } from './controller.js'
 
@@ -18,7 +18,7 @@ interface HarnessContext extends Context {
   agents: AgentRegistry
   sessions: SessionStore
   workspaceRegistry: WorkspaceRegistry
-  sessionPersistence: SessionPersistence
+  sessionQuery: SessionQueryEngine
 }
 
 function messageText(event: SessionEvent): string | undefined {
@@ -40,16 +40,6 @@ function messageText(event: SessionEvent): string | undefined {
     return text.length === 0 ? undefined : `Harness：${text}`
   }
   return undefined
-}
-
-function titleFor(id: string, events: readonly SessionEvent[]): string {
-  for (let index = events.length - 1; index >= 0; index--) {
-    const event = events[index] as { type?: string; data?: unknown } | undefined
-    if (event?.type !== 'session/title') continue
-    const data = event.data as { title?: unknown }
-    if (typeof data.title === 'string' && data.title.length > 0) return data.title
-  }
-  return `对话 ${id.slice(-8)}`
 }
 
 function asSessionId(value: string): SessionId {
@@ -116,9 +106,8 @@ export class DshHarnessBridge implements HarnessBridge {
     if (workspace === undefined) throw new Error('当前项目不存在，请重新使用 /up 选择项目。')
     const rows: ConversationInfo[] = []
     for (const id of workspace.sessionIds) {
-      const session = this.ctx.agents.get(id)?.session
-      const events = session?.events ?? (await this.ctx.sessionPersistence.inspect(id)).events
-      rows.push({ id, name: titleFor(id, events) })
+      const title = await this.ctx.sessionQuery.readTitle(id)
+      rows.push({ id, name: title?.title ?? `对话 ${id.slice(-8)}` })
     }
     return rows
   }
@@ -137,15 +126,13 @@ export class DshHarnessBridge implements HarnessBridge {
     const workspace = this.ctx.workspaceRegistry.list().find(item => item.sessionIds.includes(asSessionId(conversationId)))
     if (workspace === undefined) return undefined
     const id = asSessionId(conversationId)
-    const live = this.ctx.agents.get(id)?.session
-    const events = live?.events ?? (await this.ctx.sessionPersistence.inspect(id)).events
-    return { id: conversationId, name: titleFor(conversationId, events) }
+    const title = await this.ctx.sessionQuery.readTitle(id)
+    return { id: conversationId, name: title?.title ?? `对话 ${id.slice(-8)}` }
   }
 
   async recentMessages(conversationId: string, count: number): Promise<string[]> {
     const id = asSessionId(conversationId)
-    const live = this.ctx.agents.get(id)?.session
-    const events = live?.events ?? (await this.ctx.sessionPersistence.inspect(id)).events
+    const { events } = await this.ctx.sessionQuery.readSession(id)
     return events.map(messageText).filter((text): text is string => text !== undefined).slice(-count)
   }
 
@@ -173,7 +160,7 @@ export class DshHarnessBridge implements HarnessBridge {
       agent.followup(userMessage(text))
       await agent.whenIdle()
       await this.ctx.sessions.flush(agent.session)
-      const reply = lastAssistantText(agent.session.events, fromSeq)
+      const reply = lastAssistantText((await this.ctx.sessionQuery.readSession(id)).events, fromSeq)
       try {
         await this.onCompleted?.({ conversationId, chatId, reply })
       } catch {

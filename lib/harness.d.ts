@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { AgentRegistry } from '@deepseek-ai/dsh-agent';
 import type { UserMessage } from '@deepseek-ai/dsh-llm';
 import type { SessionStore } from '@deepseek-ai/dsh-session';
-import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence';
+import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query';
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace';
 import type { ConversationInfo, HarnessBridge, ProjectInfo } from './controller.js';
 interface ApprovalRouter {
@@ -15,7 +15,7 @@ interface HarnessContext extends Context {
     agents: AgentRegistry;
     sessions: SessionStore;
     workspaceRegistry: WorkspaceRegistry;
-    sessionPersistence: SessionPersistence;
+    sessionQuery: SessionQueryEngine;
 }
 export declare function userMessage(text: string): UserMessage;
 export interface ConversationCompletedEvent {
