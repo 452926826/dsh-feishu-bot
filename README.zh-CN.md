@@ -10,7 +10,7 @@
 
 ## 扫码绑定
 
-插件未找到现有凭据时会自动调用飞书官方 OAuth 2.0 Device Authorization Grant 一键创建应用流程，在 DSH 终端日志直接显示二维码，并生成：
+插件未找到现有凭据时会启动飞书 OAuth 2.0 Device Authorization Grant 创建应用流程，并在宿主机以 `0600` 权限生成二维码文件：
 
 ```text
 ~/.dsh/feishu-bot/feishu-bind-qr.png
@@ -23,7 +23,7 @@
 1. 申请机器人发送消息权限 `im:message:send_as_bot`。
 2. 订阅接收消息事件 `im.message.receive_v1`。
 3. 立即将飞书返回的凭据和扫码者 `open_id` 以 `0600` 权限保存到 `~/.dsh/feishu-bot/credentials.json`，再调用 tenant token API 验证；后置验证失败会记录警告，但不会丢弃已创建应用的凭据或重复创建机器人。
-4. 默认只允许扫码者向机器人发指令；可通过 `FEISHU_ALLOWED_CHATS` 额外开放指定群聊。
+4. 默认允许扫码用户；`FEISHU_ALLOWED_USERS` 可增加允许的用户。设置 `FEISHU_ALLOWED_CHATS` 后，用户和会话必须同时匹配。
 5. 删除已使用的二维码并立即连接飞书 WebSocket。
 
 创建完成后，按飞书确认页指引发布应用，将机器人加入群聊或与机器人单聊。无需公网回调地址。
@@ -55,7 +55,9 @@
 
 ```bash
 export FEISHU_PROJECTS_ROOT='/absolute/path/to/projects'
-# 推荐：只允许这些飞书 chat_id 操作 Harness，逗号分隔。
+# 手工凭据必须设置允许的用户 open_id；扫码绑定时会与扫码用户合并。
+export FEISHU_ALLOWED_USERS='ou_xxx,ou_yyy'
+# 可选：进一步限制会话 ID；用户也必须在允许名单中。
 export FEISHU_ALLOWED_CHATS='oc_xxx,oc_yyy'
 # 可选：向这些 chat 广播任意 Harness 对话完成通知；默认至少通知发起对话的 chat。
 export FEISHU_NOTIFY_CHATS='oc_ops,oc_owner'
@@ -72,7 +74,6 @@ export FEISHU_APP_SECRET='xxx'
 
 - `FEISHU_CREDENTIALS_PATH`：扫码凭据文件路径
 - `FEISHU_QR_PATH`：二维码 PNG 输出路径
-- `FEISHU_QR_TERMINAL=false`：不在终端日志显示二维码（默认显示）
 - `FEISHU_REBIND=true`：下次启动时删除已保存的本地凭据并重新扫码绑定；成功后应移除该变量
 - `FEISHU_STATE_PATH`：项目和对话选择状态文件路径
 - `DSH_HOME`：Harness 数据目录，默认 `~/.dsh`
@@ -100,7 +101,7 @@ allowBuilds:
 dsh web
 ```
 
-插件包含 Host 和 Web 客户端两侧。安装并启用插件后，Harness 的“设置 → 插件”中会出现“飞书配置”；卸载或禁用插件后该入口消失。未绑定时页面显示二维码，已绑定时只显示脱敏绑定信息。每台机器默认使用自己的 `~/.dsh/feishu-bot/credentials.json`，目标机器应重新扫码绑定，不要将源机器的 App Secret 或凭据文件放进插件归档。
+插件包含 Host 和 Web 客户端两侧。启用后，Harness“设置 → 插件”中的“飞书配置”经 DSH 连接鉴权后显示绑定状态，但不提供二维码图片。请通过可信渠道在宿主机打开 `0600` 权限的二维码文件；日志不输出二维码或链接。每台机器默认使用自己的 `~/.dsh/feishu-bot/credentials.json`，目标机器应重新扫码绑定，不要将 App Secret 或凭据文件放进插件归档。
 
 从源码开发安装：
 
@@ -128,4 +129,4 @@ npm run binding:status
 
 二维码包含短时设备授权凭据，在完成绑定前不要发给无权创建应用的人。长期 App Secret 只存于本机凭据文件，不写入二维码、仓库或 `cordis.patch.yml`。
 
-机器人收到的普通文本会作为用户指令提交给 Harness，权限等同于当前 DSH profile。生产使用应配置 `FEISHU_ALLOWED_CHATS`；否则任何能联系机器人的飞书 chat 都可操作 Harness。
+普通消息会作为用户指令提交 Harness，拥有当前 DSH profile 的权限。发送者必须匹配扫码用户或 `FEISHU_ALLOWED_USERS`；手工凭据且未配置用户时默认拒绝所有发送者。设置 `FEISHU_ALLOWED_CHATS` 时还必须匹配会话，未设置则允许白名单用户在任意会话操作。发送到群聊的回复和通知对群成员可见，包括无权操作机器人的成员。`FEISHU_NOTIFY_CHATS` 会广播回复，未设置时默认使用 `FEISHU_ALLOWED_CHATS`，请谨慎选择目标。

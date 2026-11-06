@@ -177,9 +177,8 @@ export function isSenderAllowed(
   allowedChats: ReadonlySet<string>,
   allowedUsers: ReadonlySet<string>,
 ): boolean {
-  if (allowedChats.size === 0 && allowedUsers.size === 0) return true
-  if (allowedChats.has(chatId)) return true
   return senderOpenId !== undefined && allowedUsers.has(senderOpenId)
+    && (allowedChats.size === 0 || allowedChats.has(chatId))
 }
 
 export function splitText(text: string, maxLength: number): string[] {

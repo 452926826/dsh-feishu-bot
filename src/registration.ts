@@ -1,4 +1,5 @@
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import * as lark from '@larksuiteoapi/node-sdk'
 import QRCode from 'qrcode'
@@ -95,49 +96,64 @@ export async function registerByQrCode(options: {
   qrPath: string
   logger: RegistrationLogger
   signal?: AbortSignal
+  registerApp?: typeof lark.registerApp
+  validate?: typeof validateCredentials
+  writeQr?: typeof writeQrCode
 }): Promise<FeishuCredentials> {
-  const result = await lark.registerApp({
-    source: 'dsh-feishu-bot',
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-    createOnly: true,
-    appPreset: {
-      name: 'DeepSeek Harness',
-      desc: '通过飞书与本机 DeepSeek Harness 对话',
-    },
-    addons: {
-      preset: false,
-      scopes: { tenant: ['im:message:send_as_bot'] },
-      events: { items: { tenant: ['im.message.receive_v1'] } },
-    },
-    onQRCodeReady: info => {
-      void Promise.all([
-        writeQrCode(options.qrPath, info.url),
-        process.env.FEISHU_QR_TERMINAL === 'false' ? Promise.resolve(undefined) : renderTerminalQr(info.url),
-      ]).then(([, terminal]) => {
-        options.logger.info(`scan Feishu QR code: ${options.qrPath}`)
-        if (terminal !== undefined) options.logger.info(`\n${terminal}`)
-        options.logger.info(`binding link (expires in ${info.expireIn}s): ${info.url}`)
-      }).catch(error => options.logger.warn(`failed to render QR code: ${String(error)}`))
-    },
-    onStatusChange: info => {
-      options.logger.info(`Feishu binding status: ${info.status}`)
-    },
-  })
+  let qrWrites = Promise.resolve()
+  let result: Awaited<ReturnType<typeof lark.registerApp>>
+  try {
+    result = await (options.registerApp ?? lark.registerApp)({
+      source: 'dsh-feishu-bot',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      createOnly: true,
+      appPreset: {
+        name: 'DeepSeek Harness',
+        desc: '通过飞书与本机 DeepSeek Harness 对话',
+      },
+      addons: {
+        preset: false,
+        scopes: { tenant: ['im:message:send_as_bot'] },
+        events: { items: { tenant: ['im.message.receive_v1'] } },
+      },
+      onQRCodeReady: info => {
+        qrWrites = qrWrites.then(() => saveRegistrationQr(options.qrPath, info.url, options.logger, options.writeQr))
+      },
+      onStatusChange: info => {
+        options.logger.info(`Feishu binding status: ${info.status}`)
+      },
+    })
+  } finally {
+    await qrWrites
+    try {
+      await rm(options.qrPath, { force: true })
+    } catch {
+      options.logger.warn('failed to remove Feishu QR code; remove it securely')
+    }
+  }
   const credentials: FeishuCredentials = {
     appId: result.client_id,
     appSecret: result.client_secret,
     ...(result.user_info?.open_id === undefined ? {} : { ownerOpenId: result.user_info.open_id }),
   }
   await saveCredentials(options.credentialsPath, credentials, result.user_info)
-  await rm(options.qrPath, { force: true })
   options.logger.info(`Feishu binding complete; credentials saved to ${options.credentialsPath}`)
   try {
-    await validateCredentials(credentials)
+    await (options.validate ?? validateCredentials)(credentials)
     options.logger.info('Feishu credentials validated with the tenant token API')
-  } catch (error) {
-    options.logger.warn(`Feishu credentials were saved but tenant token validation failed: ${String(error)}`)
+  } catch {
+    options.logger.warn('Feishu credentials were saved but tenant token validation failed')
   }
   return credentials
+}
+
+export async function saveRegistrationQr(path: string, url: string, logger: RegistrationLogger, write: typeof writeQrCode = writeQrCode): Promise<void> {
+  try {
+    await write(path, url)
+    logger.info(`Feishu QR code saved to ${path}`)
+  } catch {
+    logger.warn('failed to write Feishu QR code')
+  }
 }
 
 export async function renderTerminalQr(url: string): Promise<string> {
@@ -146,11 +162,17 @@ export async function renderTerminalQr(url: string): Promise<string> {
 
 export async function writeQrCode(path: string, url: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  await QRCode.toFile(path, url, {
+  const image = await QRCode.toBuffer(url, {
     type: 'png',
     width: 512,
     margin: 2,
     errorCorrectionLevel: 'M',
   })
-  await chmod(path, 0o600)
+  const temporary = `${path}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, image, { mode: 0o600, flag: 'wx' })
+    await rename(temporary, path)
+  } finally {
+    await rm(temporary, { force: true })
+  }
 }

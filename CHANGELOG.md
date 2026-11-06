@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Authenticate binding status requests through DSH connection and never expose QR images over HTTP or in logs.
+- Require an allowed Feishu user and, when configured, an allowed chat; manual credentials now require `FEISHU_ALLOWED_USERS`.
+- Serialize QR writes and clean up after registration, and give environment credentials precedence in binding status.
+
 ## 0.1.5
 
 - Migrated session history and titles to the DSH session-query service and aligned approval handling with DSH 0.2.2-rc.1.

@@ -10,7 +10,7 @@ Requires Node.js 20 or later and DSH `>=0.2.2-rc.1 <0.3.0-0`, with the host-prov
 
 ## QR-code binding
 
-When no credentials are available, the plugin starts Feishu's OAuth 2.0 Device Authorization Grant application-creation flow, renders a QR code in the DSH terminal, and writes it to:
+When no credentials are available, the plugin starts Feishu's OAuth 2.0 Device Authorization Grant application-creation flow and writes a QR image with mode `0600` on the host to:
 
 ```text
 ~/.dsh/feishu-bot/feishu-bind-qr.png
@@ -23,7 +23,7 @@ After confirmation, the plugin:
 1. Requests the `im:message:send_as_bot` permission.
 2. Subscribes to `im.message.receive_v1` events.
 3. Saves the returned credentials and the scanner's `open_id` to `~/.dsh/feishu-bot/credentials.json` with mode `0600`, then validates them with the tenant token API. A post-creation validation failure is logged but does not discard the credentials or create another bot.
-4. Allows only the scanning user by default. Additional group chats can be allowed through `FEISHU_ALLOWED_CHATS`.
+4. Allows the scanning user by default. `FEISHU_ALLOWED_USERS` adds users; when `FEISHU_ALLOWED_CHATS` is set, both the user and chat must match.
 5. Deletes the consumed QR code and connects to Feishu WebSocket immediately.
 
 Publish the application as instructed by Feishu, then add the bot to a group or start a direct conversation. No public callback URL is required.
@@ -55,7 +55,10 @@ QR binding does not require App ID or App Secret. Optional settings:
 
 ```bash
 export FEISHU_PROJECTS_ROOT='/absolute/path/to/projects'
-# Recommended: comma-separated Feishu chat IDs allowed to operate Harness.
+# Required with manual credentials: comma-separated Feishu open_id values.
+# With QR binding these users are added to the scanning owner.
+export FEISHU_ALLOWED_USERS='ou_xxx,ou_yyy'
+# Optional additional restriction: allowed chat IDs (user must also match).
 export FEISHU_ALLOWED_CHATS='oc_xxx,oc_yyy'
 # Optional: broadcast every completed Harness conversation to these chats.
 # The originating chat is always notified as well.
@@ -73,7 +76,6 @@ Other optional variables:
 
 - `FEISHU_CREDENTIALS_PATH`: saved credential file path
 - `FEISHU_QR_PATH`: QR-code PNG output path
-- `FEISHU_QR_TERMINAL=false`: disable terminal QR rendering
 - `FEISHU_REBIND=true`: delete saved credentials and bind again on the next start; remove it after successful binding
 - `FEISHU_STATE_PATH`: project and conversation selection state path
 - `DSH_HOME`: Harness data directory, defaulting to `~/.dsh`
@@ -101,7 +103,7 @@ Restart Harness after installation:
 dsh web
 ```
 
-The package contains both Host and Web client plugins. When enabled, a Feishu configuration entry appears under Harness Settings > Plugins. An unbound installation displays the QR code; a bound installation only displays masked binding information. Each machine uses its own `~/.dsh/feishu-bot/credentials.json` by default. Bind again on the target machine and never include App Secret or credential files in the plugin archive.
+The package contains both Host and Web client plugins. When enabled, a Feishu configuration entry appears under Harness Settings > Plugins. It displays binding status after DSH connection authentication but never serves the QR image. Open the `0600` QR file locally on the host through a trusted channel; the QR and link are not printed in logs. Each machine uses its own `~/.dsh/feishu-bot/credentials.json` by default. Bind again on the target machine and never include App Secret or credential files in the plugin archive.
 
 Install from source for development:
 
@@ -129,4 +131,4 @@ npm run binding:status
 
 The QR code contains short-lived device authorization credentials. Do not share it with anyone who should not be able to create an application. The long-lived App Secret remains in the local credential file and is never written to the QR code, repository, or `cordis.patch.yml`.
 
-Ordinary bot messages are submitted to Harness as user instructions and have the same effective permissions as the active DSH profile. Configure `FEISHU_ALLOWED_CHATS` in production; otherwise, any Feishu chat that can contact the bot may operate Harness.
+Ordinary bot messages are submitted to Harness as user instructions with the active DSH profile's permissions. A sender must match the QR owner or `FEISHU_ALLOWED_USERS`; with manual credentials and no configured users, all senders are denied. `FEISHU_ALLOWED_CHATS`, when set, restricts chats in addition to users; leaving it empty permits an allowed user in any chat. Replies and notifications sent to a group are visible to its members, including members who cannot operate the bot. `FEISHU_NOTIFY_CHATS` broadcasts replies and defaults to `FEISHU_ALLOWED_CHATS` when unset; choose destinations accordingly.

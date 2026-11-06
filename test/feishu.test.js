@@ -2,13 +2,16 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { isSenderAllowed, runWithThinkingMessage, splitText } from '../lib/feishu.js'
 
-test('sender access defaults to the QR owner or an explicitly allowed chat', () => {
+test('sender access requires an allowed user and any configured chat restriction', () => {
   const chats = new Set(['oc_allowed'])
   const users = new Set(['ou_owner'])
-  assert.equal(isSenderAllowed('oc_other', 'ou_owner', chats, users), true)
-  assert.equal(isSenderAllowed('oc_allowed', 'ou_other', chats, users), true)
-  assert.equal(isSenderAllowed('oc_other', 'ou_other', chats, users), false)
-  assert.equal(isSenderAllowed('oc_other', undefined, new Set(), new Set()), true)
+  assert.equal(isSenderAllowed('oc_allowed', 'ou_owner', chats, users), true)
+  assert.equal(isSenderAllowed('oc_other', 'ou_owner', chats, users), false)
+  assert.equal(isSenderAllowed('oc_allowed', 'ou_other', chats, users), false)
+  assert.equal(isSenderAllowed('oc_allowed', undefined, chats, users), false)
+  assert.equal(isSenderAllowed('oc_allowed', 'ou_owner', chats, new Set()), false)
+  assert.equal(isSenderAllowed('oc_other', 'ou_owner', new Set(), users), true)
+  assert.equal(isSenderAllowed('oc_other', undefined, new Set(), new Set()), false)
 })
 
 test('splitText preserves short messages', () => {

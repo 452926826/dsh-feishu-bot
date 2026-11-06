@@ -26,7 +26,11 @@ export declare function registerByQrCode(options: {
     qrPath: string;
     logger: RegistrationLogger;
     signal?: AbortSignal;
+    registerApp?: typeof lark.registerApp;
+    validate?: typeof validateCredentials;
+    writeQr?: typeof writeQrCode;
 }): Promise<FeishuCredentials>;
+export declare function saveRegistrationQr(path: string, url: string, logger: RegistrationLogger, write?: typeof writeQrCode): Promise<void>;
 export declare function renderTerminalQr(url: string): Promise<string>;
 export declare function writeQrCode(path: string, url: string): Promise<void>;
 //# sourceMappingURL=registration.d.ts.map

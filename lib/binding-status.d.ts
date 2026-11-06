@@ -1,7 +1,6 @@
 import type { FeishuCredentials } from './registration.js';
 export type FeishuBindingView = {
     state: 'waiting';
-    qrDataUrl: string;
     qrUpdatedAt: string;
     websocket: 'disconnected' | 'connecting' | 'connected' | 'error';
 } | {

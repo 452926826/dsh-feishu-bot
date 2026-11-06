@@ -5,13 +5,14 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { maskIdentifier, readBindingView } from '../lib/binding-status.js'
 
-test('returns a QR view without credentials', async () => {
+test('reports waiting without exposing the QR image', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-feishu-status-'))
   const qrPath = join(root, 'qr.png')
   await writeFile(qrPath, Buffer.from([137, 80, 78, 71]))
   const view = await readBindingView({ credentialsPath: join(root, 'credentials.json'), qrPath, websocket: 'connecting' })
   assert.equal(view.state, 'waiting')
-  assert.match(view.qrDataUrl, /^data:image\/png;base64,/u)
+  assert.equal('qrDataUrl' in view, false)
+  assert.equal(JSON.stringify(view).includes('iVBORw'), false)
   assert.equal(view.websocket, 'connecting')
 })
 
@@ -35,6 +36,18 @@ test('returns masked bound information without secrets', async () => {
     websocket: 'connected',
   })
   assert.equal(JSON.stringify(view).includes('must-not-appear'), false)
+})
+
+test('environment credentials override saved credentials, including malformed files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-feishu-status-'))
+  const credentialsPath = join(root, 'credentials.json')
+  await writeFile(credentialsPath, '{invalid json')
+  const view = await readBindingView({ credentialsPath, qrPath: join(root, 'qr.png'), websocket: 'connected', environmentCredentials: { appId: 'cli_environment', appSecret: 'test-secret' } })
+  assert.equal(view.state, 'bound')
+  assert.equal(view.appIdMasked, 'cli_en...ment')
+  assert.equal(view.boundAt, 'environment')
+  await writeFile(credentialsPath, JSON.stringify({ appId: 'cli_incomplete' }))
+  assert.equal((await readBindingView({ credentialsPath, qrPath: join(root, 'qr.png'), websocket: 'disconnected' })).state, 'unavailable')
 })
 
 test('masks short identifiers', () => {

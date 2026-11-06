@@ -1,14 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   loadCredentials,
+  registerByQrCode,
   registrationErrorCode,
   removeCredentials,
   renderTerminalQr,
   saveCredentials,
+  saveRegistrationQr,
   shouldRetryRegistration,
   validateCredentials,
   writeQrCode,
@@ -71,6 +73,55 @@ test('writes a valid PNG QR code', async () => {
   assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10])
   assert.equal((await stat(path)).mode & 0o777, 0o600)
 })
+
+test('registration QR logs do not reveal the link or image', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-feishu-qr-log-'))
+  const path = join(directory, 'bind.png')
+  const messages = []
+  const logger = { info: text => messages.push(text), warn: text => messages.push(text) }
+  const url = 'https://example.invalid/device?token=private-value'
+  await saveRegistrationQr(path, url, logger)
+  assert.equal((await stat(path)).mode & 0o777, 0o600)
+  assert.equal(messages.length, 1)
+  assert.equal(messages.join('').includes('private-value'), false)
+  assert.equal(messages.join('').includes('example.invalid'), false)
+  await saveRegistrationQr(join(directory, 'missing', '..', 'bind.png', 'bad'), url, logger)
+  assert.equal(messages.at(-1), 'failed to write Feishu QR code')
+})
+
+for (const fail of [false, true]) {
+  test(`registration ${fail ? 'failure' : 'success'} waits for queued QR writes before cleanup`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-feishu-qr-race-'))
+    const path = join(directory, 'qr.png')
+    const order = []
+    let release
+    const gate = new Promise(resolve => { release = resolve })
+    const pending = registerByQrCode({
+      credentialsPath: join(directory, 'credentials.json'), qrPath: path,
+      logger: { info() {}, warn() {} },
+      registerApp: async options => {
+        options.onQRCodeReady({ url: 'first', expireIn: 60 })
+        options.onQRCodeReady({ url: 'second', expireIn: 60 })
+        if (fail) throw new Error('registration failed')
+        return { client_id: 'cli_test', client_secret: 'test-secret' }
+      },
+      writeQr: async (target, url) => {
+        order.push(`start:${url}`)
+        if (url === 'first') await gate
+        await writeFile(target, url)
+        order.push(`end:${url}`)
+      },
+      validate: async () => {},
+    })
+    const observed = pending.then(() => 'success', () => 'failure')
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepEqual(order, ['start:first'])
+    release()
+    assert.equal(await observed, fail ? 'failure' : 'success')
+    assert.deepEqual(order, ['start:first', 'end:first', 'start:second', 'end:second'])
+    await assert.rejects(stat(path), { code: 'ENOENT' })
+  })
+}
 
 test('stores and reloads credentials with owner-only mode', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-feishu-credentials-'))

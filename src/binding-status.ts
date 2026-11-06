@@ -4,7 +4,6 @@ import type { FeishuCredentials } from './registration.js'
 export type FeishuBindingView =
   | {
       state: 'waiting'
-      qrDataUrl: string
       qrUpdatedAt: string
       websocket: 'disconnected' | 'connecting' | 'connected' | 'error'
     }
@@ -23,6 +22,7 @@ export type FeishuBindingView =
 
 interface StoredCredentials {
   appId?: unknown
+  appSecret?: unknown
   userOpenId?: unknown
   tenantBrand?: unknown
   createdAt?: unknown
@@ -39,13 +39,12 @@ export async function readBindingView(options: {
   websocket: FeishuBindingView['websocket']
   environmentCredentials?: FeishuCredentials
 }): Promise<FeishuBindingView> {
-  const stored = await readStoredCredentials(options.credentialsPath)
-  const credentials = stored ?? (options.environmentCredentials === undefined ? undefined : {
+  const credentials = options.environmentCredentials === undefined ? await readStoredCredentials(options.credentialsPath) : {
     appId: options.environmentCredentials.appId,
     userOpenId: options.environmentCredentials.ownerOpenId,
     createdAt: undefined,
     tenantBrand: undefined,
-  })
+  }
   if (credentials !== undefined) {
     return {
       state: 'bound',
@@ -57,10 +56,9 @@ export async function readBindingView(options: {
     }
   }
   try {
-    const [image, info] = await Promise.all([readFile(options.qrPath), stat(options.qrPath)])
+    const info = await stat(options.qrPath)
     return {
       state: 'waiting',
-      qrDataUrl: `data:image/png;base64,${image.toString('base64')}`,
       qrUpdatedAt: info.mtime.toISOString(),
       websocket: options.websocket,
     }
@@ -78,7 +76,7 @@ async function readStoredCredentials(path: string): Promise<{
 } | undefined> {
   try {
     const parsed = JSON.parse(await readFile(path, 'utf8')) as StoredCredentials
-    if (typeof parsed.appId !== 'string' || parsed.appId.length === 0) return undefined
+    if (typeof parsed.appId !== 'string' || parsed.appId.length === 0 || typeof parsed.appSecret !== 'string' || parsed.appSecret.length === 0) return undefined
     return {
       appId: parsed.appId,
       ...(typeof parsed.userOpenId === 'string' ? { userOpenId: parsed.userOpenId } : {}),

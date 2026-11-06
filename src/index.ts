@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type { ApprovalRequest, ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { ApprovalCoordinator, handleApprovalRequest } from './approval.js'
@@ -20,7 +21,7 @@ import { completionNotificationTargets } from './notifications.js'
 import { JsonSelectionStore } from './state.js'
 
 export const name = 'feishu-bot'
-export const inject = ['agents', 'sessions', 'sessionQuery', 'workspaceRegistry', 'webServer', 'approval']
+export const inject = ['agents', 'sessions', 'sessionQuery', 'workspaceRegistry', 'webServer', 'approval', 'connection']
 
 function csv(value: string | undefined): Set<string> {
   return new Set((value ?? '').split(',').map(item => item.trim()).filter(Boolean))
@@ -52,7 +53,26 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/api/plugins/feishu-binding/status',
-    handler: async (_request, response) => {
+    handler: async (request, response) => {
+      response.setHeader('Cache-Control', 'no-store')
+      try {
+        const rejection = ctx.connection.requestRejection(request)
+        if (rejection !== undefined) {
+          response.statusCode = rejection
+          response.end()
+          return
+        }
+      } catch {
+        response.statusCode = 503
+        response.end()
+        return
+      }
+      if (request.method !== 'GET') {
+        response.statusCode = 405
+        response.setHeader('Allow', 'GET')
+        response.end()
+        return
+      }
       try {
         const environment = environmentCredentials()
         const view = await readBindingView({
@@ -65,8 +85,8 @@ export function apply(ctx: Context): void {
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
         response.setHeader('Cache-Control', 'no-store')
         response.end(JSON.stringify(view))
-      } catch (error) {
-        logger.error(error instanceof Error ? error.stack ?? error.message : String(error))
+      } catch {
+        logger.error('Failed to read Feishu binding status')
         response.statusCode = 500
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
         response.end(JSON.stringify({ error: 'Failed to read Feishu binding status' }))
@@ -105,7 +125,7 @@ export function apply(ctx: Context): void {
     bot = new FeishuBot({
       ...credentials,
       allowedChats: csv(process.env.FEISHU_ALLOWED_CHATS),
-      allowedUsers: new Set(credentials.ownerOpenId === undefined ? [] : [credentials.ownerOpenId]),
+      allowedUsers: new Set([...csv(process.env.FEISHU_ALLOWED_USERS), ...(credentials.ownerOpenId === undefined ? [] : [credentials.ownerOpenId])]),
       onMessage: async message => {
         activeChats.add(message.chatId)
         try {
@@ -118,9 +138,9 @@ export function apply(ctx: Context): void {
         websocket = 'connected'
         logger.info(`connected by WebSocket; projects root: ${projectsRoot}`)
       },
-      onError: error => {
+      onError: () => {
         websocket = 'error'
-        logger.error(error instanceof Error ? error.stack ?? error.message : String(error))
+        logger.error('Feishu WebSocket error')
       },
       onReconnecting: () => {
         websocket = 'connecting'
@@ -133,8 +153,8 @@ export function apply(ctx: Context): void {
   }
 
   ctx.effect(() => {
-    void start().catch(error => {
-      if (!abort.signal.aborted) logger.error(error instanceof Error ? error.stack ?? error.message : String(error))
+    void start().catch(() => {
+      if (!abort.signal.aborted) logger.error('Feishu bot startup failed')
     })
     return async () => {
       abort.abort()
@@ -151,8 +171,8 @@ async function registerUntilComplete(options: Parameters<typeof registerByQrCode
     try {
       return await registerByQrCode(options)
     } catch (error) {
-      if (!shouldRetryRegistration(error, attempt)) throw error
-      const code = registrationErrorCode(error) ?? 'network_error'
+      if (!shouldRetryRegistration(error, attempt)) throw new Error('Feishu registration failed or was cancelled')
+      const code = registrationErrorCode(error) === 'expired_token' ? 'expired_token' : 'registration_error'
       const delay = code === 'expired_token' ? 2_000 : Math.min(30_000, 2 ** attempt * 1_000)
       options.logger.warn(`Feishu binding failed (${code}); generating a new QR code in ${delay / 1000}s`)
       await abortableDelay(delay, options.signal)
