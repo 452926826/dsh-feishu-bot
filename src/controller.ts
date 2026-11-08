@@ -1,3 +1,4 @@
+import type { FeishuImageInput } from './feishu.js'
 export interface ProjectInfo {
   id: string
   name: string
@@ -22,7 +23,7 @@ export interface HarnessBridge {
   createConversation(projectId: string): Promise<ConversationInfo>
   recentMessages(conversationId: string, count: number): Promise<string[]>
   conversationInfo(conversationId: string): Promise<ConversationInfo | undefined>
-  converse(conversationId: string, text: string, chatId: string): Promise<string>
+  converse(conversationId: string, text: string, chatId: string, images?: readonly FeishuImageInput[]): Promise<string>
   respondToApproval(chatId: string, decision: 'approve' | 'reject'): string
 }
 
@@ -98,9 +99,14 @@ export class FeishuCommandController {
     await this.selections.set(chatId, { ...selection, lastCompletedConversationId: conversationId })
   }
 
-  async handle(chatId: string, input: string): Promise<ControllerResult> {
+  async handle(chatId: string, input: string, images: readonly FeishuImageInput[] = []): Promise<ControllerResult> {
     const text = input.trim()
-    if (text.length === 0) return { text: HELP }
+    if (text.length === 0) {
+      if (images.length === 0) return { text: HELP }
+      const imageOnly = await this.selections.get(chatId)
+      if (imageOnly.conversationId === undefined) return { text: '请先使用 /uc + 索引进入对话，或使用 /nc 创建对话。' }
+      return { text: await this.bridge.converse(imageOnly.conversationId, text, chatId, images) }
+    }
     if (text === '/approve' || text === '/批准') {
       return { text: this.bridge.respondToApproval(chatId, 'approve') }
     }
@@ -188,6 +194,6 @@ export class FeishuCommandController {
 
     if (text.startsWith('/')) return { text: `未知指令：${text.split(/\s/u, 1)[0]}\n\n${HELP}` }
     if (selection.conversationId === undefined) return { text: '请先使用 /uc + 索引进入对话，或使用 /nc 创建对话。' }
-    return { text: await this.bridge.converse(selection.conversationId, text, chatId) }
+    return { text: await this.bridge.converse(selection.conversationId, text, chatId, images) }
   }
 }

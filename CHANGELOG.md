@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Accept image, rich-post and file messages again: screenshots and documents were dropped silently since the 0.2.2 migration. Images reach the model as prompt attachments; files are downloaded to `$DSH_HOME/feishu-bot/files/<message id>/` and submitted as a readable local path. Unsupported media (audio, media, stickers) now answer with an explanation instead of being ignored.
 - Authenticate binding status requests through DSH connection and never expose QR images over HTTP or in logs.
 - Require an allowed Feishu user and, when configured, an allowed chat; manual credentials now require `FEISHU_ALLOWED_USERS`.
 - Serialize QR writes and clean up after registration, and give environment credentials precedence in binding status.

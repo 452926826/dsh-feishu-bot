@@ -1,10 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { AgentRegistry } from '@deepseek-ai/dsh-agent';
-import type { UserMessage } from '@deepseek-ai/dsh-llm';
+import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm';
 import type { SessionStore } from '@deepseek-ai/dsh-session';
 import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query';
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace';
 import type { ConversationInfo, HarnessBridge, ProjectInfo } from './controller.js';
+import type { FeishuImageInput } from './feishu.js';
 interface ApprovalRouter {
     bind(sessionId: string, chatId: string): {
         dispose(): void;
@@ -17,7 +18,7 @@ interface HarnessContext extends Context {
     workspaceRegistry: WorkspaceRegistry;
     sessionQuery: SessionQueryEngine;
 }
-export declare function userMessage(text: string): UserMessage;
+export declare function userMessage(content: string | readonly ContentBlock[]): UserMessage;
 export interface ConversationCompletedEvent {
     conversationId: string;
     chatId: string;
@@ -37,9 +38,10 @@ export declare class DshHarnessBridge implements HarnessBridge {
     createConversation(projectId: string): Promise<ConversationInfo>;
     conversationInfo(conversationId: string): Promise<ConversationInfo | undefined>;
     recentMessages(conversationId: string, count: number): Promise<string[]>;
-    converse(conversationId: string, text: string, chatId: string): Promise<string>;
+    converse(conversationId: string, text: string, chatId: string, images?: readonly FeishuImageInput[]): Promise<string>;
     respondToApproval(chatId: string, decision: 'approve' | 'reject'): string;
     private runConversation;
+    private buildContent;
     private ensureAgent;
     private safeProjectName;
 }

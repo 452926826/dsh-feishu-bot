@@ -3,11 +3,12 @@ import { basename, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
-import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SessionId, SessionStore } from '@deepseek-ai/dsh-session'
 import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import type { ConversationInfo, HarnessBridge, ProjectInfo } from './controller.js'
+import type { FeishuImageInput } from './feishu.js'
 
 interface ApprovalRouter {
   bind(sessionId: string, chatId: string): { dispose(): void }
@@ -46,15 +47,16 @@ function asSessionId(value: string): SessionId {
   return value as SessionId
 }
 
-export function userMessage(text: string): UserMessage {
+export function userMessage(content: string | readonly ContentBlock[]): UserMessage {
+  const blocks = (typeof content === 'string' ? [{ type: 'text', text: content }] : content) as ContentBlock[]
   const message: UserMessage = {
     id: randomUUID() as UserMessage['id'],
     role: 'user',
-    content: [{ type: 'text', text }],
+    content: blocks,
     source: { kind: 'user' },
   }
-  Object.freeze(message.content[0])
-  Object.freeze(message.content)
+  for (const block of blocks) Object.freeze(block)
+  Object.freeze(blocks)
   Object.freeze(message.source)
   return Object.freeze(message)
 }
@@ -136,9 +138,9 @@ export class DshHarnessBridge implements HarnessBridge {
     return events.map(messageText).filter((text): text is string => text !== undefined).slice(-count)
   }
 
-  async converse(conversationId: string, text: string, chatId: string): Promise<string> {
+  async converse(conversationId: string, text: string, chatId: string, images: readonly FeishuImageInput[] = []): Promise<string> {
     const previous = this.queues.get(conversationId) ?? Promise.resolve()
-    const task = previous.catch(() => undefined).then(() => this.runConversation(conversationId, text, chatId))
+    const task = previous.catch(() => undefined).then(() => this.runConversation(conversationId, text, chatId, images))
     this.queues.set(conversationId, task)
     try {
       return await task
@@ -151,13 +153,13 @@ export class DshHarnessBridge implements HarnessBridge {
     return this.approvals.respond(chatId, decision)
   }
 
-  private async runConversation(conversationId: string, text: string, chatId: string): Promise<string> {
+  private async runConversation(conversationId: string, text: string, chatId: string, images: readonly FeishuImageInput[] = []): Promise<string> {
     const route = this.approvals.bind(conversationId, chatId)
     try {
       const id = asSessionId(conversationId)
       const agent = await this.ensureAgent(id)
       const fromSeq = agent.session.seq
-      agent.followup(userMessage(text))
+      agent.followup(userMessage(await this.buildContent(text, images)))
       await agent.whenIdle()
       await this.ctx.sessions.flush(agent.session)
       const reply = lastAssistantText((await this.ctx.sessionQuery.readSession(id)).events, fromSeq)
@@ -169,6 +171,27 @@ export class DshHarnessBridge implements HarnessBridge {
       return reply
     } finally {
       route.dispose()
+    }
+  }
+
+  private async buildContent(text: string, images: readonly FeishuImageInput[]): Promise<readonly ContentBlock[]> {
+    const prompt = text.trim()
+    const parts: Array<{ type: 'text'; text: string } | { type: 'image'; mediaType: FeishuImageInput['mediaType']; data: string; name: string }> = []
+    if (prompt.length > 0) parts.push({ type: 'text', text: prompt })
+    if (images.length === 0) return prompt.length > 0 ? [{ type: 'text', text: prompt }] : []
+    for (const image of images) parts.push({ type: 'image', mediaType: image.mediaType, data: image.data, name: image.name })
+    const attachments = (this.ctx as unknown as { get?: (name: string) => unknown }).get?.('attachments') as
+      | { admitPromptContent?(content: readonly unknown[]): Promise<readonly unknown[]> }
+      | undefined
+    if (attachments === undefined || typeof attachments.admitPromptContent !== 'function') {
+      return [{ type: 'text', text: `${prompt}\n\n（收到图片，但附件服务不可用，已忽略图片。）`.trim() }]
+    }
+    try {
+      const admitted = (await attachments.admitPromptContent(parts)) as readonly ContentBlock[]
+      return admitted
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      return [{ type: 'text', text: `${prompt}\n\n（图片无法处理：${detail}）`.trim() }]
     }
   }
 

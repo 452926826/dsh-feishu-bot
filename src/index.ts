@@ -129,7 +129,7 @@ export function apply(ctx: Context): void {
       onMessage: async message => {
         activeChats.add(message.chatId)
         try {
-          return (await controller.handle(message.chatId, message.text)).text
+          return (await controller.handle(message.chatId, message.text, message.images)).text
         } finally {
           activeChats.delete(message.chatId)
         }
