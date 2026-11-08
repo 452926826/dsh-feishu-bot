@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isSenderAllowed, runWithThinkingMessage, splitText } from '../lib/feishu.js'
+import { FeishuBot, isSenderAllowed, runWithThinkingMessage, splitText } from '../lib/feishu.js'
 
 test('sender access requires an allowed user and any configured chat restriction', () => {
   const chats = new Set(['oc_allowed'])
@@ -56,4 +56,51 @@ test('falls back to a new reply if the thinking message cannot be updated', asyn
     onError: error => { calls.push(`error:${error.message}`) },
   })
   assert.deepEqual(calls, ['error:update failed', 'send:answer'])
+})
+
+test('parses plain text messages', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  const parsed = await bot.parseMessage('text', JSON.stringify({ text: '  hello  ' }), 'om_1')
+  assert.deepEqual(parsed, { text: 'hello', images: [] })
+})
+
+test('parses rich-post messages into text and image attachments', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  bot.downloadImage = async (_messageId, key) => ({ data: 'AAAA', mediaType: 'image/png', name: `${key}.png` })
+  const post = JSON.stringify({
+    zh_cn: {
+      title: '标题',
+      content: [
+        [{ tag: 'text', text: '看这个' }, { tag: 'img', image_key: 'img_v3_1' }],
+        [{ tag: 'a', text: '链接', href: 'https://example.com' }],
+      ],
+    },
+  })
+  const parsed = await bot.parseMessage('post', post, 'om_2')
+  assert.equal(parsed.text, '标题\n看这个\n链接 (https://example.com)')
+  assert.equal(parsed.images.length, 1)
+  assert.equal(parsed.images[0].name, 'img_v3_1.png')
+})
+
+test('parses image messages into one attachment', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  bot.downloadImage = async () => ({ data: 'BBBB', mediaType: 'image/jpeg', name: 'photo.jpg' })
+  const parsed = await bot.parseMessage('image', JSON.stringify({ image_key: 'img_v3_2' }), 'om_3')
+  assert.equal(parsed.text, '')
+  assert.equal(parsed.images.length, 1)
+  assert.equal(parsed.images[0].mediaType, 'image/jpeg')
+})
+
+test('parses file messages into a readable local path', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  bot.downloadFile = async () => ({ name: 'notes.md', size: 12, path: '/tmp/feishu-inbound/notes.md' })
+  const parsed = await bot.parseMessage('file', JSON.stringify({ file_key: 'file_1', file_name: 'notes.md' }), 'om_4')
+  assert.match(parsed.text, /^\[用户发来文件\] notes\.md（12 字节）/u)
+  assert.match(parsed.text, /本地路径：\/tmp\/feishu-inbound\/notes\.md/u)
+})
+
+test('unsupported message types parse to nothing', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  const parsed = await bot.parseMessage('audio', JSON.stringify({}), 'om_5')
+  assert.deepEqual(parsed, { text: '', images: [] })
 })

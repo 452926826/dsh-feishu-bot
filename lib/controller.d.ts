@@ -1,3 +1,4 @@
+import type { FeishuImageInput } from './feishu.js';
 export interface ProjectInfo {
     id: string;
     name: string;
@@ -19,7 +20,7 @@ export interface HarnessBridge {
     createConversation(projectId: string): Promise<ConversationInfo>;
     recentMessages(conversationId: string, count: number): Promise<string[]>;
     conversationInfo(conversationId: string): Promise<ConversationInfo | undefined>;
-    converse(conversationId: string, text: string, chatId: string): Promise<string>;
+    converse(conversationId: string, text: string, chatId: string, images?: readonly FeishuImageInput[]): Promise<string>;
     respondToApproval(chatId: string, decision: 'approve' | 'reject'): string;
 }
 export interface SelectionStore {
@@ -39,6 +40,6 @@ export declare class FeishuCommandController {
     private readonly selections;
     constructor(bridge: HarnessBridge, selections: SelectionStore);
     markConversationCompleted(chatId: string, conversationId: string): Promise<void>;
-    handle(chatId: string, input: string): Promise<ControllerResult>;
+    handle(chatId: string, input: string, images?: readonly FeishuImageInput[]): Promise<ControllerResult>;
 }
 //# sourceMappingURL=controller.d.ts.map

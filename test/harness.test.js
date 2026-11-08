@@ -92,3 +92,26 @@ test('binds approvals to the originating chat only while a conversation runs', a
   assert.deepEqual(calls, ['bind:session-1:chat-1', 'dispose:session-1:chat-1'])
   assert.equal(bridge.respondToApproval('chat-1', 'reject'), 'chat-1:reject')
 })
+
+test('builds image blocks through the attachment service', async () => {
+  const admitted = []
+  const ctx = {
+    get: name => name === 'attachments'
+      ? { async admitPromptContent(parts) { admitted.push(...parts); return parts.map(part => part.type === 'image' ? { type: 'image', attachment: { id: 'attachment-1' } } : part) } }
+      : undefined,
+  }
+  const bridge = new DshHarnessBridge(ctx, '/projects', { bind: () => ({ dispose() {} }), respond: () => '' })
+  const blocks = await bridge.buildContent('看这张图', [{ data: 'AAAA', mediaType: 'image/png', name: 'shot.png' }])
+  assert.equal(admitted.length, 2)
+  assert.equal(admitted[1].type, 'image')
+  assert.equal(blocks.length, 2)
+  assert.equal(blocks[1].type, 'image')
+})
+
+test('degrades to text when the attachment service is unavailable', async () => {
+  const bridge = new DshHarnessBridge({ get: () => undefined }, '/projects', { bind: () => ({ dispose() {} }), respond: () => '' })
+  const blocks = await bridge.buildContent('看这张图', [{ data: 'AAAA', mediaType: 'image/png', name: 'shot.png' }])
+  assert.equal(blocks.length, 1)
+  assert.equal(blocks[0].type, 'text')
+  assert.match(blocks[0].text, /附件服务不可用/u)
+})

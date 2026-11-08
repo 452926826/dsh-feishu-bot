@@ -1,8 +1,16 @@
+export type FeishuImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+export interface FeishuImageInput {
+    /** Canonical base64 of the downloaded image bytes. */
+    data: string;
+    mediaType: FeishuImageMediaType;
+    name: string;
+}
 export interface FeishuInboundMessage {
     chatId: string;
     messageId: string;
     senderOpenId?: string;
     text: string;
+    images: readonly FeishuImageInput[];
 }
 export interface FeishuBotOptions {
     appId: string;
@@ -14,6 +22,8 @@ export interface FeishuBotOptions {
     onError(error: unknown): void;
     onReconnecting?(): void;
     pingTimeoutSeconds?: number;
+    /** Directory inbound files are written to; defaults to `$DSH_HOME/feishu-bot/files`. */
+    fileDir?: string;
 }
 export declare class FeishuBot {
     private readonly options;
@@ -22,11 +32,21 @@ export declare class FeishuBot {
     private readonly dispatcher;
     private readonly seen;
     private stopped;
+    private token;
     constructor(options: FeishuBotOptions);
     start(): void;
     stop(): Promise<void>;
     sendText(chatId: string, text: string): Promise<void>;
     private receive;
+    parseMessage(type: string | undefined, content: string | undefined, messageId: string): Promise<{
+        text: string;
+        images: FeishuImageInput[];
+    }>;
+    private parsePost;
+    private tenantToken;
+    private downloadImage;
+    private downloadFile;
+    private fileDir;
     private send;
     private sendOne;
     private update;
