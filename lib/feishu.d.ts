@@ -29,6 +29,8 @@ export declare class FeishuBot {
     private receive;
     private send;
     private sendOne;
+    /** Post rich Markdown as an interactive card; fall back to plain text when the card is rejected. */
+    private sendCard;
     private update;
 }
 export declare function runWithThinkingMessage(options: {

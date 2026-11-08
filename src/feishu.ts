@@ -1,4 +1,5 @@
 import * as lark from '@larksuiteoapi/node-sdk'
+import { cardContent, splitCardMarkdown, toFeishuMarkdown } from './format.js'
 
 export interface FeishuInboundMessage {
   chatId: string
@@ -105,28 +106,44 @@ export class FeishuBot {
   }
 
   private async send(chatId: string, text: string): Promise<void> {
-    for (const chunk of splitText(text, 3500)) await this.sendOne(chatId, chunk)
+    for (const chunk of splitCardMarkdown(toFeishuMarkdown(text))) await this.sendCard(chatId, chunk, chunk)
   }
 
   private async sendOne(chatId: string, text: string): Promise<string | undefined> {
-    const response = await this.client.im.message.create({
-      params: { receive_id_type: 'chat_id' },
-      data: {
-        receive_id: chatId,
-        msg_type: 'text',
-        content: JSON.stringify({ text }),
-      },
-    })
-    return response.data?.message_id
+    return this.sendCard(chatId, toFeishuMarkdown(text), text)
+  }
+
+  /** Post rich Markdown as an interactive card; fall back to plain text when the card is rejected. */
+  private async sendCard(chatId: string, markdown: string, plain?: string): Promise<string | undefined> {
+    try {
+      const response = await this.client.im.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: { receive_id: chatId, msg_type: 'interactive', content: cardContent(markdown) },
+      })
+      return response.data?.message_id
+    } catch (error) {
+      if (plain === undefined) throw error
+      this.options.onError(error)
+      const response = await this.client.im.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: { receive_id: chatId, msg_type: 'text', content: JSON.stringify({ text: plain }) },
+      })
+      return response.data?.message_id
+    }
   }
 
   private async update(messageId: string, chatId: string, text: string): Promise<void> {
-    const [first, ...rest] = splitText(text, 3500)
-    await this.client.im.message.update({
-      path: { message_id: messageId },
-      data: { msg_type: 'text', content: JSON.stringify({ text: first ?? '' }) },
-    })
-    for (const chunk of rest) await this.sendOne(chatId, chunk)
+    const chunks = splitCardMarkdown(toFeishuMarkdown(text))
+    try {
+      await this.client.im.message.patch({ path: { message_id: messageId }, data: { content: cardContent(chunks[0] ?? '') } })
+    } catch (error) {
+      // A placeholder that cannot be patched (for example one sent as plain text) is replaced, never left behind.
+      this.options.onError(error)
+      await this.client.im.message.delete({ path: { message_id: messageId } }).catch(() => {})
+      for (const chunk of chunks) await this.sendCard(chatId, chunk, chunk)
+      return
+    }
+    for (const chunk of chunks.slice(1)) await this.sendCard(chatId, chunk, chunk)
   }
 }
 
