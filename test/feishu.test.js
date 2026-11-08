@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isSenderAllowed, runWithThinkingMessage, splitText } from '../lib/feishu.js'
+import { FeishuBot, isSenderAllowed, runWithThinkingMessage, splitText } from '../lib/feishu.js'
 
 test('sender access requires an allowed user and any configured chat restriction', () => {
   const chats = new Set(['oc_allowed'])
@@ -56,4 +56,39 @@ test('falls back to a new reply if the thinking message cannot be updated', asyn
     onError: error => { calls.push(`error:${error.message}`) },
   })
   assert.deepEqual(calls, ['error:update failed', 'send:answer'])
+})
+
+test('posts replies as interactive cards', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  const sent = []
+  bot.client.im.message.create = async payload => { sent.push(payload); return { data: { message_id: 'om_card' } } }
+  await bot.sendOne('oc_chat', '**粗体** 与 `code`')
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0].data.msg_type, 'interactive')
+  const card = JSON.parse(sent[0].data.content)
+  assert.equal(card.elements[0].tag, 'markdown')
+  assert.equal(card.elements[0].text_size, 'normal')
+})
+
+test('falls back to plain text when a card is rejected', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  const attempts = []
+  bot.client.im.message.create = async payload => {
+    attempts.push(payload.data.msg_type)
+    if (payload.data.msg_type === 'interactive') throw new Error('card rejected')
+    return { data: { message_id: 'om_text' } }
+  }
+  const id = await bot.sendOne('oc_chat', 'hello')
+  assert.deepEqual(attempts, ['interactive', 'text'])
+  assert.equal(id, 'om_text')
+})
+
+test('patches the thinking placeholder instead of posting a second message', async () => {
+  const bot = new FeishuBot({ appId: 'cli_test', appSecret: 'secret', allowedChats: new Set(), allowedUsers: new Set(), onMessage: async () => '', onError: () => {} })
+  const patches = []
+  bot.client.im.message.patch = async payload => { patches.push(payload) }
+  bot.client.im.message.create = async () => { throw new Error('should not create') }
+  await bot.update('om_thinking', 'oc_chat', 'final answer')
+  assert.equal(patches.length, 1)
+  assert.equal(patches[0].path.message_id, 'om_thinking')
 })

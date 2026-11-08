@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Render replies as interactive cards again, so Markdown headings, tables and code blocks keep their formatting; the 0.2.2 rewrite had fallen back to plain text messages. Card creation degrades to plain text when Feishu rejects the payload, and the thinking placeholder is patched in place.
+- Report why a turn stopped. A failed turn used to answer "Harness 已处理消息，但没有返回文本内容。" and hide the provider error; it now prefixes `⚠️ 本轮执行失败：` with the underlying message and code, and appends the reason to partial replies.
 - Authenticate binding status requests through DSH connection and never expose QR images over HTTP or in logs.
 - Require an allowed Feishu user and, when configured, an allowed chat; manual credentials now require `FEISHU_ALLOWED_USERS`.
 - Serialize QR writes and clean up after registration, and give environment credentials precedence in binding status.

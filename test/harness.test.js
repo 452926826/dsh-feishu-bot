@@ -92,3 +92,27 @@ test('binds approvals to the originating chat only while a conversation runs', a
   assert.deepEqual(calls, ['bind:session-1:chat-1', 'dispose:session-1:chat-1'])
   assert.equal(bridge.respondToApproval('chat-1', 'reject'), 'chat-1:reject')
 })
+
+test('surfaces the stop reason when a turn fails without producing text', async () => {
+  const events = [{
+    type: 'turn/end',
+    data: { reason: { kind: 'error', error: { message: 'This model\'s maximum context length is 1048576 tokens', code: 'CONTEXT_WINDOW_EXCEEDED' } } },
+  }]
+  const agent = { session: { id: 'session-failed', seq: 0 }, followup() {}, async whenIdle() {} }
+  const ctx = { agents: { get: () => agent }, sessions: { async flush() {} }, sessionQuery: { async readSession() { return { events } } } }
+  const bridge = new DshHarnessBridge(ctx, '/projects', { bind: () => ({ dispose() {} }), respond: () => 'ok' })
+  const reply = await bridge.converse('session-failed', 'hello', 'chat-1')
+  assert.match(reply, /^⚠️ 本轮执行失败：This model's maximum context length/u)
+  assert.match(reply, /CONTEXT_WINDOW_EXCEEDED/u)
+})
+
+test('keeps a partial reply and appends why it stopped', async () => {
+  const events = [
+    { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '部分结论' }] } } },
+    { type: 'turn/end', data: { reason: { kind: 'aborted' } } },
+  ]
+  const agent = { session: { id: 'session-aborted', seq: 0 }, followup() {}, async whenIdle() {} }
+  const ctx = { agents: { get: () => agent }, sessions: { async flush() {} }, sessionQuery: { async readSession() { return { events } } } }
+  const bridge = new DshHarnessBridge(ctx, '/projects', { bind: () => ({ dispose() {} }), respond: () => 'ok' })
+  assert.equal(await bridge.converse('session-aborted', 'hello', 'chat-1'), '部分结论\n\n⚠️ 本轮执行中断：本轮被取消。')
+})

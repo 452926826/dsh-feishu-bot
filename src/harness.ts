@@ -59,19 +59,49 @@ export function userMessage(text: string): UserMessage {
   return Object.freeze(message)
 }
 
+const EMPTY_REPLY = 'Harness 已处理消息，但没有返回文本内容。'
+
 function lastAssistantText(events: readonly SessionEvent[], fromSeq: number): string {
   const messages = events
     .slice(fromSeq)
     .filter(event => event.type === 'assistant/message')
     .map(event => messageText(event))
     .filter((text): text is string => text !== undefined)
-  return messages.at(-1)?.replace(/^Harness：/u, '') ?? 'Harness 已处理消息，但没有返回文本内容。'
+  return messages.at(-1)?.replace(/^Harness：/u, '') ?? EMPTY_REPLY
 }
 
 export interface ConversationCompletedEvent {
   conversationId: string
   chatId: string
   reply: string
+}
+
+/**
+ * Describe why the last turn stopped when it did not complete normally.
+ * A failed turn produces no assistant message, so without this the bot would
+ * report EMPTY_REPLY and hide the provider error.
+ */
+function turnStopNote(events: readonly SessionEvent[], fromSeq: number): string | undefined {
+  for (let index = events.length - 1; index >= fromSeq; index--) {
+    const event = events[index]
+    if (event === undefined || event.type !== 'turn/end') continue
+    const reason = event.data?.reason
+    if (reason === undefined || reason.kind === 'completed') return undefined
+    if (reason.kind === 'error') {
+      const error = (reason.error ?? {}) as { message?: unknown; code?: unknown; status?: unknown }
+      const message = typeof error.message === 'string' && error.message.length > 0 ? error.message : '未知错误'
+      const code = typeof error.code === 'string' && error.code.length > 0
+        ? `（${error.code}${typeof error.status === 'number' ? ` ${error.status}` : ''}）`
+        : ''
+      return `${message}${code}`
+    }
+    if (reason.kind === 'aborted') return '本轮被取消。'
+    if (reason.kind === 'blocked') return '本轮被策略拦截。'
+    if (reason.kind === 'max-tokens') return '本轮达到输出上限。'
+    if (reason.kind === 'interrupted') return '本轮因进程中断而终止。'
+    return `本轮以 ${reason.kind} 结束。`
+  }
+  return undefined
 }
 
 export class DshHarnessBridge implements HarnessBridge {
@@ -160,13 +190,20 @@ export class DshHarnessBridge implements HarnessBridge {
       agent.followup(userMessage(text))
       await agent.whenIdle()
       await this.ctx.sessions.flush(agent.session)
-      const reply = lastAssistantText((await this.ctx.sessionQuery.readSession(id)).events, fromSeq)
+      const events = (await this.ctx.sessionQuery.readSession(id)).events
+      const reply = lastAssistantText(events, fromSeq)
+      const stop = turnStopNote(events, fromSeq)
+      const answer = stop === undefined
+        ? reply
+        : reply === EMPTY_REPLY
+          ? `⚠️ 本轮执行失败：${stop}`
+          : `${reply}\n\n⚠️ 本轮执行中断：${stop}`
       try {
-        await this.onCompleted?.({ conversationId, chatId, reply })
+        await this.onCompleted?.({ conversationId, chatId, reply: answer })
       } catch {
         // Completion notifications are best-effort and must not hide a completed answer.
       }
-      return reply
+      return answer
     } finally {
       route.dispose()
     }
