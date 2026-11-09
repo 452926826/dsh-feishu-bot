@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, AgentHandle, AgentRegistry } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentRegistry } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SessionId, SessionStore } from '@deepseek-ai/dsh-session'
 import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
@@ -175,7 +175,21 @@ export class DshHarnessBridge implements HarnessBridge {
   private async ensureAgent(id: SessionId): Promise<Agent> {
     const live = this.ctx.agents.get(id)
     if (live !== undefined) return live
-    const handle = await this.ctx.agents.resume({ resumeSessionId: id })
+    // A fresh session has no recorded model selection, and resume() does not
+    // apply the default model on its own. Seed the agent with the current
+    // default selection so the very first turn has a provider/model instead of
+    // failing with "agent has no provider/model".
+    const get = (this.ctx as unknown as { get?: (name: string) => unknown }).get
+    const defaultModel = typeof get === 'function' ? get.call(this.ctx, 'agentDefaultModel') as
+      | { currentSelection?(): AgentOptions | undefined }
+      | undefined : undefined
+    const agentOptions = defaultModel === undefined || typeof defaultModel.currentSelection !== 'function'
+      ? undefined
+      : defaultModel.currentSelection()
+    const handle = await this.ctx.agents.resume({
+      resumeSessionId: id,
+      ...(agentOptions === undefined ? {} : { agentOptions }),
+    })
     this.handles.set(id, handle)
     return handle.agent
   }

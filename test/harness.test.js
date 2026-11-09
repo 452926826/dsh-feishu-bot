@@ -92,3 +92,24 @@ test('binds approvals to the originating chat only while a conversation runs', a
   assert.deepEqual(calls, ['bind:session-1:chat-1', 'dispose:session-1:chat-1'])
   assert.equal(bridge.respondToApproval('chat-1', 'reject'), 'chat-1:reject')
 })
+
+test('seeds a fresh agent with the current default model selection', async () => {
+  const resumes = []
+  const agent = { session: { id: 'session-new', seq: 0 } }
+  const ctx = {
+    agents: {
+      get: () => undefined,
+      async resume(options) { resumes.push(options); return { agent, close: async () => {} } },
+    },
+    get: name => name === 'agentDefaultModel'
+      ? { currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-flash' }) }
+      : undefined,
+  }
+  const bridge = new DshHarnessBridge(ctx, '/projects', { bind: () => ({ dispose() {} }), respond: () => 'ok' })
+  const out = await bridge.ensureAgent('session-new')
+  assert.equal(out, agent)
+  assert.deepEqual(resumes[0], {
+    resumeSessionId: 'session-new',
+    agentOptions: { provider: 'deepseek-official', model: 'deepseek-flash' },
+  })
+})
